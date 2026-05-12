@@ -13,7 +13,7 @@
 # Only python built-in modules can be used.
 
 import sys
-
+print("$$$$$$$$$$$$ THIS IS PYBOOT01 $$$$$$$$$$$$")
 import pyimod02_importers
 
 # Extend Python import machinery by adding PEP302 importers to sys.meta_path.

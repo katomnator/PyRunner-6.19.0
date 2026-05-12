@@ -116,10 +116,11 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
 #endif
 
     /* Fully resolve the executable name. */
-    if (_pyi_main_resolve_executable(pyi_ctx) < 0) {
-        return -1;
-    }
-    PYI_DEBUG("LOADER: executable file: %s\n", pyi_ctx->executable_filename);
+
+    // if (_pyi_main_resolve_executable(pyi_ctx) < 0) {
+    //     return -1;
+    // }
+    // PYI_DEBUG("LOADER: executable file: %s\n", pyi_ctx->executable_filename);
 
     /* Resolve main PKG archive - embedded or side-loaded. */
     if (_pyi_main_resolve_pkg_archive(pyi_ctx) < 0) {
@@ -1425,7 +1426,7 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 
     /* Try opening embedded archive first */
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
-    pyi_ctx->archive = pyi_archive_open(pyi_ctx->executable_filename);
+    pyi_ctx->archive = pyi_archive_open(pyi_ctx->exe_buffer);
     if (pyi_ctx->archive != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
         snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);

@@ -347,7 +347,7 @@ cleanup:
  * Returns offset within the file if MAGIC pattern is found, 0 otherwise.
  */
 static uint64_t
-_pyi_archive_find_pkg_cookie_offset(FILE *fp)
+_pyi_archive_find_pkg_cookie_offset(const struct EXE_BUFFER *exe_buffer)
 {
     /* Prepare MAGIC pattern; we need to do this programmatically to
      * prevent the pattern itself being stored in the code and matched
@@ -357,7 +357,7 @@ _pyi_archive_find_pkg_cookie_offset(FILE *fp)
     magic[3] += 0x0C; /* 0x00 -> 0x0C */
 
     /* Search using the helper */
-    return pyi_utils_find_magic_pattern(fp, magic, sizeof(magic));
+    return pyi_utils_find_magic_pattern(exe_buffer, magic, sizeof(magic));
 }
 
 /* Check if the TOC entry's typecode corresponds to an extractable file */
@@ -388,25 +388,25 @@ _pyi_archive_is_extractable(char typecode)
  * Open the archive.
  */
 struct ARCHIVE *
-pyi_archive_open(const char *filename)
+pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
 {
-    FILE *archive_fp = NULL;
+    // FILE *archive_fp = NULL;
     uint64_t cookie_pos = 0;
     struct ARCHIVE_COOKIE archive_cookie;
     struct ARCHIVE *archive = NULL;
     struct TOC_ENTRY *toc_entry;
 
-    PYI_DEBUG("LOADER: attempting to open archive %s\n", filename);
+    // PYI_DEBUG("LOADER: attempting to open archive %s\n", filename);
 
-    /* Open the archive file */
-    archive_fp = pyi_path_fopen(filename, "rb");
-    if (archive_fp == NULL) {
-        PYI_DEBUG("LOADER: cannot open archive: %s\n", filename);
-        return NULL;
-    }
+    // /* Open the archive file */
+    // archive_fp = pyi_path_fopen(filename, "rb");
+    // if (archive_fp == NULL) {
+    //     PYI_DEBUG("LOADER: cannot open archive: %s\n", filename);
+    //     return NULL;
+    // }
 
     /* Search for the embedded archive's cookie */
-    cookie_pos = _pyi_archive_find_pkg_cookie_offset(archive_fp);
+    cookie_pos = _pyi_archive_find_pkg_cookie_offset(exe_buffer);
     if (cookie_pos == 0) {
         PYI_DEBUG("LOADER: cannot find cookie!\n");
         goto cleanup;
@@ -414,14 +414,16 @@ pyi_archive_open(const char *filename)
     PYI_DEBUG("LOADER: cookie found at offset 0x%" PRIX64 "\n", cookie_pos);
 
     /* Read the cookie */
-    if (pyi_fseek(archive_fp, cookie_pos, SEEK_SET) < 0) {
-        PYI_PERROR("fseek", "Failed to seek to cookie position!\n");
-        goto cleanup;
-    }
-    if (fread(&archive_cookie, sizeof(struct ARCHIVE_COOKIE), 1, archive_fp) < 1) {
-        PYI_PERROR("fread", "Failed to read cookie!\n");
-        goto cleanup;
-    }
+    // if (pyi_fseek(archive_fp, cookie_pos, SEEK_SET) < 0) {
+    //     PYI_PERROR("fseek", "Failed to seek to cookie position!\n");
+    //     goto cleanup;
+    // }
+    // if (fread(&archive_cookie, sizeof(struct ARCHIVE_COOKIE), 1, archive_fp) < 1) {
+    //     PYI_PERROR("fread", "Failed to read cookie!\n");
+    //     goto cleanup;
+    // }
+
+    memcpy(&archive_coockie, exe_buffer->address + cookie_pos, sizeof(struct ARCHIVE_COOKIE));
 
     /* Allocate the structure */
     archive = (struct ARCHIVE *)calloc(1, sizeof(struct ARCHIVE));

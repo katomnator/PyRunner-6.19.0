@@ -81,6 +81,14 @@ enum PYI_PROCESS_LEVEL
     PYI_PROCESS_LEVEL_SUBPROCESS = 2
 };
 
+struct EXE_BUFFER
+{
+    /* Address to the buffer containing the executable */
+    unsigned char *address;
+
+    /* Size of the buffer */
+    std:size_t size;
+};
 
 struct PYI_CONTEXT
 {
@@ -128,11 +136,13 @@ struct PYI_CONTEXT
     char **pyi_argv;
 #endif /* ifdef _WIN32 */
 
-    /* Fully resolved path to the executable */
-    char executable_filename[PYI_PATH_MAX];
+    struct EXE_BUFFER *exe_buffer;
 
-    /* Fully resolved path to the main PKG archive */
-    char archive_filename[PYI_PATH_MAX];
+    // /* Fully resolved path to the executable */
+    // char executable_filename[PYI_PATH_MAX];
+
+    // /* Fully resolved path to the main PKG archive */
+    // char archive_filename[PYI_PATH_MAX];
 
     /* Main PKG archive */
     struct ARCHIVE *archive;

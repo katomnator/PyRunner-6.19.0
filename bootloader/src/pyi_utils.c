@@ -178,7 +178,7 @@ const unsigned char MAGIC_BASE[8] = {
  * Returns offset within the file if MAGIC pattern is found, 0 otherwise.
  */
 uint64_t
-pyi_utils_find_magic_pattern(FILE *fp, const unsigned char *magic, size_t magic_len)
+pyi_utils_find_magic_pattern(const struct EXE_BUFFER *exe_buffer, const unsigned char *magic, size_t magic_len)
 {
     static const int SEARCH_CHUNK_SIZE = 8192;
     unsigned char *buffer = NULL;
@@ -192,12 +192,12 @@ pyi_utils_find_magic_pattern(FILE *fp, const unsigned char *magic, size_t magic_
         goto cleanup;
     }
 
-    /* Determine file size */
-    if (pyi_fseek(fp, 0, SEEK_END) < 0) {
-        PYI_DEBUG("LOADER: failed to seek to the end of the file!\n");
-        goto cleanup;
-    }
-    end_pos = pyi_ftell(fp);
+    // /* Determine file size */
+    // if (pyi_fseek(fp, 0, SEEK_END) < 0) {
+    //     PYI_DEBUG("LOADER: failed to seek to the end of the file!\n");
+    //     goto cleanup;
+    // }
+    end_pos = (uint64_t)exe_buffer->size;
 
     /* Sanity check */
     if (end_pos < magic_len) {
@@ -218,14 +218,16 @@ pyi_utils_find_magic_pattern(FILE *fp, const unsigned char *magic, size_t magic_
         }
 
         /* Read the chunk */
-        if (pyi_fseek(fp, start_pos, SEEK_SET) < 0) {
-            PYI_DEBUG("LOADER: failed to seek to the offset 0x%" PRIX64 "!\n", start_pos);
-            goto cleanup;
-        }
-        if (fread(buffer, 1, chunk_size, fp) != chunk_size) {
-            PYI_DEBUG("LOADER: failed to read chunk (%zd bytes)!\n", chunk_size);
-            goto cleanup;
-        }
+        // if (pyi_fseek(fp, start_pos, SEEK_SET) < 0) {
+        //     PYI_DEBUG("LOADER: failed to seek to the offset 0x%" PRIX64 "!\n", start_pos);
+        //     goto cleanup;
+        // }
+        // if (fread(buffer, 1, chunk_size, fp) != chunk_size) {
+        //     PYI_DEBUG("LOADER: failed to read chunk (%zd bytes)!\n", chunk_size);
+        //     goto cleanup;
+        // }
+
+        memcpy(buffer, exe_buffer->address + start_pos, chunk_size);
 
         /* Scan the chunk */
         for (i = chunk_size - magic_len + 1; i > 0; i--) {
