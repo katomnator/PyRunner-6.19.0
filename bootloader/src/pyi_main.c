@@ -122,6 +122,8 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     // }
     // PYI_DEBUG("LOADER: executable file: %s\n", pyi_ctx->executable_filename);
 
+    snprintf(pyi_ctx->executable_filename, PYI_PATH_MAX, "ptinstaller_exe");
+
     /* Resolve main PKG archive - embedded or side-loaded. */
     if (_pyi_main_resolve_pkg_archive(pyi_ctx) < 0) {
         return -1;
@@ -137,16 +139,16 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     PYI_DEBUG("LOADER: application has %s semantics...\n", pyi_ctx->is_onefile ? "onefile" : "onedir");
 
     /* Check if splash screen is available. */
-    pyi_ctx->has_splash = pyi_ctx->archive->toc_splash != NULL;
-    if (pyi_ctx->has_splash) {
-        /* Check if user requested splash screen to be suppressed by setting
-         * the PYINSTALLER_SUPPRESS_SPLASH_SCREEN environment variable to 1. */
-        env_var_value = pyi_getenv("PYINSTALLER_SUPPRESS_SPLASH_SCREEN");
-        if (env_var_value) {
-            pyi_ctx->suppress_splash = strcmp(env_var_value, "1") == 0;
-        }
-        free(env_var_value);
-    }
+    // pyi_ctx->has_splash = pyi_ctx->archive->toc_splash != NULL;
+    // if (pyi_ctx->has_splash) {
+    //     /* Check if user requested splash screen to be suppressed by setting
+    //      * the PYINSTALLER_SUPPRESS_SPLASH_SCREEN environment variable to 1. */
+    //     env_var_value = pyi_getenv("PYINSTALLER_SUPPRESS_SPLASH_SCREEN");
+    //     if (env_var_value) {
+    //         pyi_ctx->suppress_splash = strcmp(env_var_value, "1") == 0;
+    //     }
+    //     free(env_var_value);
+    // }
 
     /* Check if user explicitly requested environment reset via the
      * PYINSTALLER_RESET_ENVIRONMENT environment variable. In this case,
@@ -272,17 +274,17 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
                     pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT;
                 }
 #endif
-            } else {
-                /* Onedir mode */
-#if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
-                /* Windows, macOS, Cygwin - mark as the main process. */
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-#else
-                /* Other POSIX systems - mark as the parent/launcher
-                 * that needs to restart itself. */
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
-#endif
-            }
+//             } else {
+//                 /* Onedir mode */
+// #if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
+//                 /* Windows, macOS, Cygwin - mark as the main process. */
+//                 pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
+// #else
+//                 /* Other POSIX systems - mark as the parent/launcher
+//                  * that needs to restart itself. */
+//                 pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
+// #endif
+//             }
             break;
         }
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__CYGWIN__)
@@ -299,12 +301,12 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
             break;
         }
 #endif
+        // case PYI_PROCESS_LEVEL_PARENT: {
+        //     /* We are the main application process of a onefile application. */
+        //     pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
+        //     break;
+        // }
         case PYI_PROCESS_LEVEL_PARENT: {
-            /* We are the main application process of a onefile application. */
-            pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-            break;
-        }
-        case PYI_PROCESS_LEVEL_MAIN: {
             /* We are a sub-process spawned from the main application process,
             * using the same executable (e.g., via sys.executable). */
             pyi_ctx->process_level = PYI_PROCESS_LEVEL_SUBPROCESS;
@@ -895,10 +897,10 @@ _pyi_main_setup_splash_screen(struct PYI_CONTEXT *pyi_ctx)
     }
 
     /* Finally, start the splash screen */
-    if (pyi_splash_start(pyi_ctx->splash, pyi_ctx->executable_filename) != 0) {
-        PYI_WARNING("Failed to start splash screen!\n");
-        goto cleanup;
-    }
+    // if (pyi_splash_start(pyi_ctx->splash, pyi_ctx->executable_filename) != 0) {
+    //     PYI_WARNING("Failed to start splash screen!\n");
+    //     goto cleanup;
+    // }
 
     /* Done! */
     return;
@@ -1372,52 +1374,52 @@ _pyi_resolve_executable_posix(const char *argv0, char *executable_filename, char
 #endif
 
 
-static int
-_pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
-{
-    /* Resolve using OS-specific implementation */
-#ifdef _WIN32
-    return _pyi_resolve_executable_win32(pyi_ctx->executable_filename);
-#elif __APPLE__
-    return _pyi_resolve_executable_macos(pyi_ctx->executable_filename);
-#else
-    return _pyi_resolve_executable_posix(pyi_ctx->argv[0], pyi_ctx->executable_filename, pyi_ctx->dynamic_loader_filename);
-#endif
-}
+// static int
+// _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
+// {
+//     /* Resolve using OS-specific implementation */
+// #ifdef _WIN32
+//     return _pyi_resolve_executable_win32(pyi_ctx->executable_filename);
+// #elif __APPLE__
+//     return _pyi_resolve_executable_macos(pyi_ctx->executable_filename);
+// #else
+//     return _pyi_resolve_executable_posix(pyi_ctx->argv[0], pyi_ctx->executable_filename, pyi_ctx->dynamic_loader_filename);
+// #endif
+// }
 
 
 /**********************************************************************\
  *                      Archive file resolution                       *
 \**********************************************************************/
-static int
-_pyi_allow_pkg_sideload(const char *executable)
-{
-    FILE *file = NULL;
-    uint64_t magic_offset;
-    unsigned char magic[8];
+// static int
+// _pyi_allow_pkg_sideload(const char *executable)
+// {
+//     FILE *file = NULL;
+//     uint64_t magic_offset;
+//     unsigned char magic[8];
 
-    /* First, find the PKG sideload signature in the executable */
-    file = pyi_path_fopen(executable, "rb");
-    if (!file) {
-        return -1;
-    }
+//     /* First, find the PKG sideload signature in the executable */
+//     file = pyi_path_fopen(executable, "rb");
+//     if (!file) {
+//         return -1;
+//     }
 
-    /* Prepare magic pattern */
-    memcpy(magic, MAGIC_BASE, sizeof(magic));
-    magic[3] += 0x0D;  /* 0x00 -> 0x0D */
+//     /* Prepare magic pattern */
+//     memcpy(magic, MAGIC_BASE, sizeof(magic));
+//     magic[3] += 0x0D;  /* 0x00 -> 0x0D */
 
-    /* Find magic pattern in the executable */
-    magic_offset = pyi_utils_find_magic_pattern(file, magic, sizeof(magic));
-    if (magic_offset == 0) {
-        fclose(file);
-        return 1; /* Error code 1: no embedded PKG sideload signature */
-    }
+//     /* Find magic pattern in the executable */
+//     magic_offset = pyi_utils_find_magic_pattern(file, magic, sizeof(magic));
+//     if (magic_offset == 0) {
+//         fclose(file);
+//         return 1; /* Error code 1: no embedded PKG sideload signature */
+//     }
 
-    /* TODO: expand the verification by embedding hash of the PKG file */
+//     /* TODO: expand the verification by embedding hash of the PKG file */
 
-    /* Allow PKG to be sideloaded */
-    return 0;
-}
+//     /* Allow PKG to be sideloaded */
+//     return 0;
+// }
 
 static int
 _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
@@ -1429,7 +1431,7 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
     pyi_ctx->archive = pyi_archive_open(pyi_ctx->exe_buffer);
     if (pyi_ctx->archive != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
-        //snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
+        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, , pyi_ctx->executable_filename);
         return 0;
     }
 

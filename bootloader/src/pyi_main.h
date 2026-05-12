@@ -140,10 +140,10 @@ struct PYI_CONTEXT
     struct EXE_BUFFER *exe_buffer;
 
     /* Fully resolved path to the executable */
-    // char executable_filename[PYI_PATH_MAX];
+    char executable_filename[PYI_PATH_MAX];
 
     /* Fully resolved path to the main PKG archive */
-    // char archive_filename[PYI_PATH_MAX];
+    char archive_filename[PYI_PATH_MAX];
 
     /* Main PKG archive */
     struct ARCHIVE *archive;
