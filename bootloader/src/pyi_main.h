@@ -15,6 +15,7 @@
 #define PYI_MAIN_H
 
 #include "pyi_global.h"
+#include <stddef.h>
 
 #ifndef _WIN32
     #include <sys/types.h> /* pid_t */
@@ -87,7 +88,7 @@ struct EXE_BUFFER
     unsigned char *address;
 
     /* Size of the buffer */
-    std:size_t size;
+    size_t size;
 };
 
 struct PYI_CONTEXT
@@ -138,10 +139,10 @@ struct PYI_CONTEXT
 
     struct EXE_BUFFER *exe_buffer;
 
-    // /* Fully resolved path to the executable */
+    /* Fully resolved path to the executable */
     // char executable_filename[PYI_PATH_MAX];
 
-    // /* Fully resolved path to the main PKG archive */
+    /* Fully resolved path to the main PKG archive */
     // char archive_filename[PYI_PATH_MAX];
 
     /* Main PKG archive */

@@ -126,7 +126,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     if (_pyi_main_resolve_pkg_archive(pyi_ctx) < 0) {
         return -1;
     }
-    PYI_DEBUG("LOADER: archive file: %s\n", pyi_ctx->archive_filename);
+    // PYI_DEBUG("LOADER: archive file: %s\n", pyi_ctx->archive_filename);
 
     /* We can now access PKG archive via pyi_ctx->archive; for example,
      * to read run-time options */
@@ -1429,45 +1429,45 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
     pyi_ctx->archive = pyi_archive_open(pyi_ctx->exe_buffer);
     if (pyi_ctx->archive != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
-        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
+        //snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
         return 0;
     }
 
-    PYI_DEBUG("LOADER: failed to open executable-embedded archive!\n");
+    //PYI_DEBUG("LOADER: failed to open executable-embedded archive!\n");
 
     /* Check if side-load is allowed */
-    status = _pyi_allow_pkg_sideload(pyi_ctx->executable_filename);
-    if (status != 0) {
-        PYI_DEBUG("LOADER: side-load is disabled (code %d)!\n", status);
-        PYI_ERROR(
-            "Could not load PyInstaller's embedded PKG archive from the executable (%s)\n",
-            pyi_ctx->executable_filename
-        );
-        return -1;
-    }
+    // status = _pyi_allow_pkg_sideload(pyi_ctx->executable_filename);
+    // if (status != 0) {
+    //     PYI_DEBUG("LOADER: side-load is disabled (code %d)!\n", status);
+    //     PYI_ERROR(
+    //         "Could not load PyInstaller's embedded PKG archive from the executable (%s)\n",
+    //         pyi_ctx->executable_filename
+    //     );
+    //     return -1;
+    // }
 
     /* Infer the archive filename in side-load mode. On Windows, the .exe
      * suffix is replaced with .pkg, while elsewhere, .pkg suffix is
      * appended to the executable file name. */
-#ifdef _WIN32
-    snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
-    strcpy(pyi_ctx->archive_filename + strlen(pyi_ctx->archive_filename) - 3, "pkg");
-#else
-    if (snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s.pkg", pyi_ctx->executable_filename) >= PYI_PATH_MAX) {
-        return -1;
-    }
-#endif
+// #ifdef _WIN32
+//     snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
+//     strcpy(pyi_ctx->archive_filename + strlen(pyi_ctx->archive_filename) - 3, "pkg");
+// #else
+//     if (snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s.pkg", pyi_ctx->executable_filename) >= PYI_PATH_MAX) {
+//         return -1;
+//     }
+// #endif
 
-    PYI_DEBUG("LOADER: trying to load external PKG archive (%s)...\n", pyi_ctx->archive_filename);
+    //PYI_DEBUG("LOADER: trying to load external PKG archive (%s)...\n", pyi_ctx->archive_filename);
 
-    pyi_ctx->archive = pyi_archive_open(pyi_ctx->archive_filename);
-    if (pyi_ctx->archive == NULL) {
-        PYI_ERROR(
-            "Could not side-load PyInstaller's PKG archive from external file (%s)\n",
-            pyi_ctx->archive_filename
-        );
-        return -1;
-    }
+    // pyi_ctx->archive = pyi_archive_open(pyi_ctx->archive_filename);
+    // if (pyi_ctx->archive == NULL) {
+    //     PYI_ERROR(
+    //         "Could not side-load PyInstaller's PKG archive from external file (%s)\n",
+    //         pyi_ctx->archive_filename
+    //     );
+    //     return -1;
+    // }
 
-    return 0;
+    // return 0;
 }

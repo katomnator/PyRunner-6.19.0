@@ -62,7 +62,7 @@ struct ARCHIVE_COOKIE
 struct ARCHIVE
 {
     /* Full path to archive file. */
-    // char filename[PYI_PATH_MAX];
+    char filename[PYI_PATH_MAX];
 
     void* exe_buffer; /* */
 

@@ -27,6 +27,7 @@
 #include "pyi_path.h"
 #include "pyi_archive.h"
 #include "pyi_utils.h"
+#include "pyi_main.h"
 
 
 /*
@@ -423,7 +424,7 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
     //     goto cleanup;
     // }
 
-    memcpy(&archive_coockie, exe_buffer->address + cookie_pos, sizeof(struct ARCHIVE_COOKIE));
+    memcpy(&archive_cookie, exe_buffer->address + cookie_pos, sizeof(struct ARCHIVE_COOKIE));
 
     /* Allocate the structure */
     archive = (struct ARCHIVE *)calloc(1, sizeof(struct ARCHIVE));
@@ -434,7 +435,7 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
 
     /* Copy the filename; since the input buffer originates from within
      * bootloader, the string is guaranteed to be within PYI_PATH_MAX limit */
-    snprintf(archive->filename, PYI_PATH_MAX, "%s", filename);
+    // snprintf(archive->filename, PYI_PATH_MAX, "%s", filename);
 
     /* Fix endianness of cookie fields */
     archive_cookie.pkg_length = pyi_be32toh(archive_cookie.pkg_length);
@@ -451,7 +452,7 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
     archive->pkg_offset = cookie_pos + sizeof(struct ARCHIVE_COOKIE) - archive_cookie.pkg_length;
 
     /* Read the table of contents (TOC) */
-    pyi_fseek(archive_fp, archive->pkg_offset + archive_cookie.toc_offset, SEEK_SET);
+    //pyi_fseek(archive_fp, archive->pkg_offset + archive_cookie.toc_offset, SEEK_SET);
     archive->toc = (struct TOC_ENTRY *)malloc(archive_cookie.toc_length);
 
     if (archive->toc == NULL) {
@@ -459,17 +460,20 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
         goto cleanup;
     }
 
-    if (fread(archive->toc, archive_cookie.toc_length, 1, archive_fp) < 1) {
-        PYI_PERROR("fread", "Could not read full TOC!\n");
-        goto cleanup;
-    }
+    // if (fread(archive->toc, archive_cookie.toc_length, 1, archive_fp) < 1) {
+    //     PYI_PERROR("fread", "Could not read full TOC!\n");
+    //     goto cleanup;
+    // }
+
+    memcpy(archive->toc, exe_buffer->address + archive->pkg_offset + archive_cookie.toc_offset, archive_cookie.toc_length);
+
     archive->toc_end = (const struct TOC_ENTRY *)(((const char *)archive->toc) + archive_cookie.toc_length);
 
     /* Check input file is still ok (should be). */
-    if (ferror(archive_fp)) {
-        PYI_ERROR("Error on file.\n");
-        goto cleanup;
-    }
+    // if (ferror(archive_fp)) {
+    //     PYI_ERROR("Error on file.\n");
+    //     goto cleanup;
+    // }
 
     /* Fix the endianness of the fields in the TOC entries. At the same
      * time, check for extractable entries that imply onefile semantics. */
@@ -495,7 +499,7 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
     }
 
 cleanup:
-    fclose(archive_fp);
+    //fclose(archive_fp);
 
     return archive;
 }
