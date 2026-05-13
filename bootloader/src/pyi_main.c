@@ -139,16 +139,16 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     PYI_DEBUG("LOADER: application has %s semantics...\n", pyi_ctx->is_onefile ? "onefile" : "onedir");
 
     /* Check if splash screen is available. */
-    // pyi_ctx->has_splash = pyi_ctx->archive->toc_splash != NULL;
-    // if (pyi_ctx->has_splash) {
-    //     /* Check if user requested splash screen to be suppressed by setting
-    //      * the PYINSTALLER_SUPPRESS_SPLASH_SCREEN environment variable to 1. */
-    //     env_var_value = pyi_getenv("PYINSTALLER_SUPPRESS_SPLASH_SCREEN");
-    //     if (env_var_value) {
-    //         pyi_ctx->suppress_splash = strcmp(env_var_value, "1") == 0;
-    //     }
-    //     free(env_var_value);
-    // }
+    pyi_ctx->has_splash = pyi_ctx->archive->toc_splash != NULL;
+    if (pyi_ctx->has_splash) {
+        /* Check if user requested splash screen to be suppressed by setting
+         * the PYINSTALLER_SUPPRESS_SPLASH_SCREEN environment variable to 1. */
+        env_var_value = pyi_getenv("PYINSTALLER_SUPPRESS_SPLASH_SCREEN");
+        if (env_var_value) {
+            pyi_ctx->suppress_splash = strcmp(env_var_value, "1") == 0;
+        }
+        free(env_var_value);
+    }
 
     /* Check if user explicitly requested environment reset via the
      * PYINSTALLER_RESET_ENVIRONMENT environment variable. In this case,
@@ -274,17 +274,17 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
                     pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT;
                 }
 #endif
-//             } else {
-//                 /* Onedir mode */
-// #if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
-//                 /* Windows, macOS, Cygwin - mark as the main process. */
-//                 pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-// #else
-//                 /* Other POSIX systems - mark as the parent/launcher
-//                  * that needs to restart itself. */
-//                 pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
-// #endif
-//             }
+            } else {
+                /* Onedir mode */
+#if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
+                /* Windows, macOS, Cygwin - mark as the main process. */
+                pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
+#else
+                /* Other POSIX systems - mark as the parent/launcher
+                 * that needs to restart itself. */
+                pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
+#endif
+            }
             break;
         }
 #if !defined(_WIN32) && !defined(__APPLE__) && !defined(__CYGWIN__)
@@ -401,7 +401,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
             PYI_DEBUG(
                 "LOADER: this is child process of onefile application (%s).\n",
                 pyi_ctx->process_level == PYI_PROCESS_LEVEL_MAIN ?
-                "main application process" : "spawned subprocess"
+                "spawned subprocess" : "main application process"
             );
             create_temp_dir = false; /* inherit */
         }
@@ -469,7 +469,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
 
         /* Determine application's top-level directory based on the
          * executable's location. */
-        pyi_path_dirname(executable_dir, pyi_ctx->executable_filename);
+        // pyi_path_dirname(executable_dir, pyi_ctx->executable_filename);
 
 #if defined(__APPLE__)
         executable_dir_len = strnlen(executable_dir, PYI_PATH_MAX);
