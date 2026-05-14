@@ -152,7 +152,7 @@ pyi_multipkg_extract_dependency(
      * executable (relative to this executable). If executables are co-located
      * (e.g., two onefile builds), the other executable's parent directory will be ".".
      */
-    pyi_path_dirname(this_executable_dir, pyi_ctx->executable_filename);
+    //pyi_path_dirname(this_executable_dir, pyi_ctx->executable_filename);
     pyi_path_dirname(other_executable_dir, other_executable);
 
     /* If dependency is located in a onedir build, we should be able to find

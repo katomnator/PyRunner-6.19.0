@@ -47,7 +47,7 @@ pyi_archive_next_toc_entry(const struct ARCHIVE *archive, const struct TOC_ENTRY
  * to be valid.
  */
 static int
-_pyi_archive_extract_compressed(FILE *archive_fp, const struct TOC_ENTRY *toc_entry, FILE *out_fp, unsigned char *out_ptr)
+_pyi_archive_extract_compressed(unsigned char *toc_entry_address, const struct TOC_ENTRY *toc_entry, FILE *out_fp, unsigned char *out_ptr)
 {
     const size_t CHUNK_SIZE = 8192;
     unsigned char *buffer_in = NULL;
@@ -85,10 +85,11 @@ _pyi_archive_extract_compressed(FILE *archive_fp, const struct TOC_ENTRY *toc_en
     do {
         /* Read chunk to input buffer */
         size_t chunk_size = (CHUNK_SIZE < remaining_size) ? CHUNK_SIZE : (size_t)remaining_size;
-        if (fread(buffer_in, 1, chunk_size, archive_fp) != chunk_size || ferror(archive_fp)) {
-            rc = -1;
-            goto cleanup;
-        }
+        // if (fread(buffer_in, 1, chunk_size, archive_fp) != chunk_size || ferror(archive_fp)) {
+        //     rc = -1;
+        //     goto cleanup;
+        // }
+        memcpy(buffer_in, toc_entry_address, chunk_size);
         remaining_size -= chunk_size;
 
         /* Run inflate() on input until output buffer is not full. */
@@ -145,7 +146,7 @@ cleanup:
  * from the archive into the provided file handle.
  */
 static int
-_pyi_archive_extract2fs_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *toc_entry, FILE *out_fp)
+_pyi_archive_extract2fs_uncompressed(unsigned char *toc_entry_address, const struct TOC_ENTRY *toc_entry, FILE *out_fp)
 {
     const size_t CHUNK_SIZE = 8192;
     unsigned char *buffer;
@@ -163,11 +164,12 @@ _pyi_archive_extract2fs_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *t
     remaining_size = toc_entry->uncompressed_length;
     while (remaining_size > 0) {
         size_t chunk_size = (CHUNK_SIZE < remaining_size) ? CHUNK_SIZE : (size_t)remaining_size;
-        if (fread(buffer, chunk_size, 1, archive_fp) < 1) {
-            PYI_PERROR("fread", "Failed to extract %s: failed to read data chunk!\n", toc_entry->name);
-            rc = -1;
-            break;
-        }
+        // if (fread(buffer, chunk_size, 1, archive_fp) < 1) {
+        //     PYI_PERROR("fread", "Failed to extract %s: failed to read data chunk!\n", toc_entry->name);
+        //     rc = -1;
+        //     break;
+        // }
+        memcpy(buffer, toc_entry_address, chunk_size);
         if (fwrite(buffer, chunk_size, 1, out_fp) < 1) {
             PYI_PERROR("fwrite", "Failed to extract %s: failed to write data chunk!\n", toc_entry->name);
             rc = -1;
@@ -184,7 +186,7 @@ _pyi_archive_extract2fs_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *t
  * the archive into the provided (pre-allocated) buffer.
  */
 static int
-_pyi_archive_extract_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *toc_entry, unsigned char *out_buf)
+_pyi_archive_extract_uncompressed(unsigned char *toc_entry_address, const struct TOC_ENTRY *toc_entry, unsigned char *out_buf)
 {
     const size_t CHUNK_SIZE = 8192;
     unsigned char *buffer;
@@ -195,10 +197,11 @@ _pyi_archive_extract_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *toc_
     remaining_size = toc_entry->uncompressed_length;
     while (remaining_size > 0) {
         size_t chunk_size = (CHUNK_SIZE < remaining_size) ? CHUNK_SIZE : (size_t)remaining_size;
-        if (fread(buffer, chunk_size, 1, archive_fp) < 1) {
-            PYI_PERROR("fread", "Failed to extract %s: failed to read data chunk!\n", toc_entry->name);
-            return -1;
-        }
+        // if (fread(buffer, chunk_size, 1, archive_fp) < 1) {
+        //     PYI_PERROR("fread", "Failed to extract %s: failed to read data chunk!\n", toc_entry->name);
+        //     return -1;
+        // }
+        memcpy(buffer, toc_entry_address, chunk_size);
         remaining_size -= chunk_size;
         buffer += chunk_size;
     }
@@ -212,21 +215,24 @@ _pyi_archive_extract_uncompressed(FILE *archive_fp, const struct TOC_ENTRY *toc_
 unsigned char *
 pyi_archive_extract(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry)
 {
-    FILE *archive_fp = NULL;
+    //FILE *archive_fp = NULL;
+    unsigned char *toc_entry_address = NULL;
     unsigned char *data = NULL;
     int rc = 0;
 
     /* Open archive (source) file... */
-    archive_fp = pyi_path_fopen(archive->filename, "rb");
-    if (archive_fp == NULL) {
-        PYI_ERROR("Failed to extract %s: failed to open archive file!\n", toc_entry->name);
-        return NULL;
-    }
-    /* ... and seek to the beginning of entry's data */
-    if (pyi_fseek(archive_fp, archive->pkg_offset + toc_entry->offset, SEEK_SET) < 0) {
-        PYI_PERROR("fseek", "Failed to extract %s: failed to seek to the entry's data!\n", toc_entry->name);
-        goto cleanup;
-    }
+    // archive_fp = pyi_path_fopen(archive->filename, "rb");
+    // if (archive_fp == NULL) {
+    //     PYI_ERROR("Failed to extract %s: failed to open archive file!\n", toc_entry->name);
+    //     return NULL;
+    // }
+    // /* ... and seek to the beginning of entry's data */
+    // if (pyi_fseek(archive_fp, archive->pkg_offset + toc_entry->offset, SEEK_SET) < 0) {
+    //     PYI_PERROR("fseek", "Failed to extract %s: failed to seek to the entry's data!\n", toc_entry->name);
+    //     goto cleanup;
+    // }
+
+    toc_entry_address = archive->exe_buffer->address + archive->pkg_offset + toc_entry->offset;
 
     /* Allocate the data buffer */
     data = (unsigned char *)malloc(toc_entry->uncompressed_length);
@@ -237,9 +243,9 @@ pyi_archive_extract(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_e
 
     /* Extract */
     if (toc_entry->compression_flag == 1) {
-        rc = _pyi_archive_extract_compressed(archive_fp, toc_entry, NULL, data);
+        rc = _pyi_archive_extract_compressed(toc_entry_address, toc_entry, NULL, data);
     } else {
-        rc = _pyi_archive_extract_uncompressed(archive_fp, toc_entry, data);
+        rc = _pyi_archive_extract_uncompressed(toc_entry_address, toc_entry, data);
     }
     if (rc != 0) {
         free(data);
@@ -247,7 +253,7 @@ pyi_archive_extract(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_e
     }
 
 cleanup:
-    fclose(archive_fp);
+    //fclose(archive_fp);
 
     return data;
 }
@@ -303,18 +309,20 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
     }
 
     /* Open archive (source) file... */
-    archive_fp = pyi_path_fopen(archive->filename, "rb");
-    if (archive_fp == NULL) {
-        PYI_ERROR("Failed to extract %s: failed to open archive file!\n", toc_entry->name);
-        rc = -1;
-        goto cleanup;
-    }
-    /* ... and seek to the beginning of entry's data */
-    if (pyi_fseek(archive_fp, archive->pkg_offset + toc_entry->offset, SEEK_SET) < 0) {
-        PYI_PERROR("fseek", "Failed to extract %s: failed to seek to the entry's data!\n", toc_entry->name);
-        rc = -1;
-        goto cleanup;
-    }
+    // archive_fp = pyi_path_fopen(archive->filename, "rb");
+    // if (archive_fp == NULL) {
+    //     PYI_ERROR("Failed to extract %s: failed to open archive file!\n", toc_entry->name);
+    //     rc = -1;
+    //     goto cleanup;
+    // }
+    // /* ... and seek to the beginning of entry's data */
+    // if (pyi_fseek(archive_fp, archive->pkg_offset + toc_entry->offset, SEEK_SET) < 0) {
+    //     PYI_PERROR("fseek", "Failed to extract %s: failed to seek to the entry's data!\n", toc_entry->name);
+    //     rc = -1;
+    //     goto cleanup;
+    // }
+
+    
 
     /* Extract */
     if (toc_entry->compression_flag == 1) {
@@ -432,6 +440,8 @@ pyi_archive_open(const struct EXE_BUFFER *exe_buffer)
         PYI_PERROR("calloc", "Could not allocate memory for archive structure!\n");
         goto cleanup;
     }
+
+    archive->exe_buffer = exe_buffer;
 
     /* Copy the filename; since the input buffer originates from within
      * bootloader, the string is guaranteed to be within PYI_PATH_MAX limit */

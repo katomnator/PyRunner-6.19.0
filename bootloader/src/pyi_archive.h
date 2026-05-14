@@ -21,6 +21,7 @@
 #include "pyi_global.h"
 #include <stdio.h>  /* FILE */
 #include <inttypes.h>  /* uint64_t */
+#include "pyi_main.h"
 
 /* Types of CArchive items. */
 #define ARCHIVE_ITEM_BINARY           'b'  /* binary */
@@ -64,7 +65,7 @@ struct ARCHIVE
     /* Full path to archive file. */
     char filename[PYI_PATH_MAX];
 
-    void* exe_buffer; /* */
+    struct EXE_BUFFER *exe_buffer; /* */
 
     uint64_t pkg_offset; /* Offset of the PKG archive in the file */
 

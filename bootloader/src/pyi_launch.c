@@ -135,17 +135,17 @@ pyi_launch_extract_files_from_archive(struct PYI_CONTEXT *pyi_ctx)
         }
 
         /* Extract */
-        if (toc_entry->typecode == ARCHIVE_ITEM_DEPENDENCY) {
-            retcode = pyi_multipkg_extract_dependency(
-                pyi_ctx,
-                multipkg_archive_pool,
-                multipkg_ref,
-                multipkg_name,
-                output_filename
-            );
-        } else {
+        // if (toc_entry->typecode == ARCHIVE_ITEM_DEPENDENCY) {
+        //     retcode = pyi_multipkg_extract_dependency(
+        //         pyi_ctx,
+        //         multipkg_archive_pool,
+        //         multipkg_ref,
+        //         multipkg_name,
+        //         output_filename
+        //     );
+        // } else {
             retcode = pyi_archive_extract2fs(archive, toc_entry, output_filename);
-        }
+        //}
 
         /* If extraction failed, there is no need to continue. */
         if (retcode != 0) {

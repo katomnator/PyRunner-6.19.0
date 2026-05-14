@@ -400,8 +400,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
         } else {
             PYI_DEBUG(
                 "LOADER: this is child process of onefile application (%s).\n",
-                pyi_ctx->process_level == PYI_PROCESS_LEVEL_MAIN ?
-                "spawned subprocess" : "main application process"
+                "spawned subprocess" 
             );
             create_temp_dir = false; /* inherit */
         }
@@ -897,10 +896,10 @@ _pyi_main_setup_splash_screen(struct PYI_CONTEXT *pyi_ctx)
     }
 
     /* Finally, start the splash screen */
-    // if (pyi_splash_start(pyi_ctx->splash, pyi_ctx->executable_filename) != 0) {
-    //     PYI_WARNING("Failed to start splash screen!\n");
-    //     goto cleanup;
-    // }
+    if (pyi_splash_start(pyi_ctx->splash, pyi_ctx->executable_filename) != 0) {
+        PYI_WARNING("Failed to start splash screen!\n");
+        goto cleanup;
+    }
 
     /* Done! */
     return;
@@ -1078,7 +1077,8 @@ _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx)
 
     /* Start the child process that will execute user's program. */
     PYI_DEBUG("LOADER: starting the child process...\n");
-    ret = pyi_utils_create_child(pyi_ctx);
+    //ret = pyi_utils_create_child(pyi_ctx);
+    _pyi_main_onedir_or_onefile_child(pyi_ctx);
 
     PYI_DEBUG("LOADER: child process exited (return code: %d)\n", ret);
 
@@ -1431,7 +1431,7 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
     pyi_ctx->archive = pyi_archive_open(pyi_ctx->exe_buffer);
     if (pyi_ctx->archive != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
-        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, , pyi_ctx->executable_filename);
+        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, pyi_ctx->executable_filename);
         return 0;
     }
 
