@@ -88,7 +88,7 @@ struct ARCHIVE
 
 
 /* The API */
-struct ARCHIVE *pyi_archive_open(const char *filename);
+struct ARCHIVE *pyi_archive_open(const struct EXE_BUFFER *exe_buffer);
 void pyi_archive_free(struct ARCHIVE **archive_ref);
 
 const struct TOC_ENTRY *pyi_archive_next_toc_entry(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry);

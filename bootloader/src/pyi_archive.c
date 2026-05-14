@@ -288,7 +288,8 @@ cleanup:
 int
 pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry, const char *output_filename)
 {
-    FILE *archive_fp = NULL;
+    //FILE *archive_fp = NULL;
+    unsigned char *toc_entry_address;
     FILE *out_fp = NULL;
     int rc = 0;
 
@@ -322,13 +323,13 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
     //     goto cleanup;
     // }
 
-    
+    toc_entry_address = archive->exe_buffer->address + archive->pkg_offset + toc_entry->offset;
 
     /* Extract */
     if (toc_entry->compression_flag == 1) {
-        rc = _pyi_archive_extract_compressed(archive_fp, toc_entry, out_fp, NULL);
+        rc = _pyi_archive_extract_compressed(toc_entry_address, toc_entry, out_fp, NULL);
     } else {
-        rc = _pyi_archive_extract2fs_uncompressed(archive_fp, toc_entry, out_fp);
+        rc = _pyi_archive_extract2fs_uncompressed(toc_entry_address, toc_entry, out_fp);
     }
 #ifndef WIN32
     if (toc_entry->typecode == ARCHIVE_ITEM_BINARY) {
@@ -340,9 +341,9 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
 
 cleanup:
     /* Might be NULL if we jumped here due to fopen() failure */
-    if (archive_fp) {
-        fclose(archive_fp);
-    }
+    // if (archive_fp) {
+    //     fclose(archive_fp);
+    // }
     fclose(out_fp);
 
     return rc;
