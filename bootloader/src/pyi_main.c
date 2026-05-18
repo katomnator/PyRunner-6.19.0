@@ -120,10 +120,16 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     if (_pyi_main_resolve_executable(pyi_ctx) < 0) {
         return -1;
     }
-    PYI_DEBUG("LOADER: executable file: %s\n", pyi_ctx->executable_filename);
+    PYI_DEBUG("LOADER: executable file on disk: %s\n", pyi_ctx->executable_filename);
 
-    /* Resolve main PKG archive - embedded or side-loaded. */
+    /* Resolve main PKG archive from exe on disk. */
     if (_pyi_main_resolve_pkg_archive(pyi_ctx) < 0) {
+        return -1;
+    }
+    PYI_DEBUG("LOADER: archive file: %s\n", pyi_ctx->archive_filename);
+
+    /* Resolve main PKG archive from exe on buffer. */
+    if (_pyi_main_resolve_pkg_archive_modified(pyi_ctx) < 0) {
         return -1;
     }
     PYI_DEBUG("LOADER: archive file: %s\n", pyi_ctx->archive_filename);
@@ -1372,18 +1378,18 @@ _pyi_resolve_executable_posix(const char *argv0, char *executable_filename, char
 #endif
 
 
-// static int
-// _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
-// {
-//     /* Resolve using OS-specific implementation */
-// #ifdef _WIN32
-//     return _pyi_resolve_executable_win32(pyi_ctx->executable_filename);
-// #elif __APPLE__
-//     return _pyi_resolve_executable_macos(pyi_ctx->executable_filename);
-// #else
-//     return _pyi_resolve_executable_posix(pyi_ctx->argv[0], pyi_ctx->executable_filename, pyi_ctx->dynamic_loader_filename);
-// #endif
-// }
+static int
+_pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
+{
+    /* Resolve using OS-specific implementation */
+#ifdef _WIN32
+    return _pyi_resolve_executable_win32(pyi_ctx->executable_filename);
+#elif __APPLE__
+    return _pyi_resolve_executable_macos(pyi_ctx->executable_filename);
+#else
+    return _pyi_resolve_executable_posix(pyi_ctx->argv[0], pyi_ctx->executable_filename, pyi_ctx->dynamic_loader_filename);
+#endif
+}
 
 
 /**********************************************************************\
@@ -1426,10 +1432,24 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 
     /* Try opening embedded archive first */
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
-    pyi_ctx->archive = pyi_archive_open(pyi_ctx->exe_buffer);
-    if (pyi_ctx->archive != NULL) {
+    pyi_ctx->archive_disk = pyi_archive_open(pyi_ctx->exe_buffer);
+    if (pyi_ctx->archive_disk != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
-        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, pyi_ctx->executable_filename);
+        snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
+        return 0;
+    }
+}
+
+
+static int
+_pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx)
+{
+    int status;
+
+    /* Try opening embedded archive first */
+    PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
+    pyi_ctx->archive = pyi_archive_open_modified(pyi_ctx->exe_buffer);
+    if (pyi_ctx->archive != NULL) {
         return 0;
     }
 

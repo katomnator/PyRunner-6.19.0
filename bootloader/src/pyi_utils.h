@@ -56,6 +56,7 @@ char *const *pyi_prepend_dynamic_loader_to_argv(const int argc, char *const argv
 /* Magic pattern matching */
 extern const unsigned char MAGIC_BASE[8];
 uint64_t pyi_utils_find_magic_pattern(FILE *fp, const unsigned char *magic, size_t magic_len);
+uint64_t pyi_utils_find_magic_pattern_modified(struct EXE_BUFFER *exe_buffer, const unsigned char *magic, size_t magic_len);
 
 /* Security descriptor for temporary directory (Windows only) */
 #if defined(_WIN32)

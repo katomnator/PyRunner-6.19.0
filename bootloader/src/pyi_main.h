@@ -137,6 +137,7 @@ struct PYI_CONTEXT
     char **pyi_argv;
 #endif /* ifdef _WIN32 */
 
+    /* Contains the address and size of the buffer that holds our pyinstaller exe (tool) */
     struct EXE_BUFFER *exe_buffer;
 
     /* Fully resolved path to the executable */
@@ -145,8 +146,11 @@ struct PYI_CONTEXT
     /* Fully resolved path to the main PKG archive */
     //char archive_filename[PYI_PATH_MAX];
 
-    /* Main PKG archive */
+    /* Main PKG archive - Extracted from umodified pyinstaller exe on buffer */
     struct ARCHIVE *archive;
+
+    /* Main PKG archive - Extracted from modified pyinstaller exe on disk */
+    struct ARCHIVE *archive_disk;
 
     /* Flag indicating whether application contains resources for
      * displaying splash screen or not. This does not reflect the

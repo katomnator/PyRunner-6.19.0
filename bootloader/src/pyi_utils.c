@@ -178,7 +178,7 @@ const unsigned char MAGIC_BASE[8] = {
  * Returns offset within the file if MAGIC pattern is found, 0 otherwise.
  */
 uint64_t
-pyi_utils_find_magic_pattern(const struct EXE_BUFFER *exe_buffer, const unsigned char *magic, size_t magic_len)
+pyi_utils_find_magic_pattern_modified(struct EXE_BUFFER *exe_buffer, const unsigned char *magic, size_t magic_len)
 {
     static const int SEARCH_CHUNK_SIZE = 8192;
     unsigned char *buffer = NULL;
