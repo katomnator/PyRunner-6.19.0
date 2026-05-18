@@ -440,7 +440,7 @@ _pyi_archive_create_symlink(const struct ARCHIVE *archive, const struct TOC_ENTR
     int rc = -1;
 
     /* Extract symlink target */
-    link_target = (char *)pyi_archive_extract(archive, toc_entry);
+    link_target = (char *)pyi_archive_extract_modified(archive, toc_entry);
     if (!link_target) {
         goto cleanup;
     }
@@ -499,9 +499,9 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
 
     /* Extract */
     if (toc_entry->compression_flag == 1) {
-        rc = _pyi_archive_extract_compressed(toc_entry_address, toc_entry, out_fp, NULL);
+        rc = _pyi_archive_extract_compressed_modified(toc_entry_address, toc_entry, out_fp, NULL);
     } else {
-        rc = _pyi_archive_extract2fs_uncompressed(toc_entry_address, toc_entry, out_fp);
+        rc = _pyi_archive_extract2fs_uncompressed_modified(toc_entry_address, toc_entry, out_fp);
     }
 #ifndef WIN32
     if (toc_entry->typecode == ARCHIVE_ITEM_BINARY) {

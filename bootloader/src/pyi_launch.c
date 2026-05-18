@@ -309,7 +309,7 @@ _pyi_launch_run_scripts(const struct PYI_CONTEXT *pyi_ctx)
         }
 
         /* Get data out of the archive.  */
-        data = pyi_archive_extract(archive, toc_entry);
+        data = pyi_archive_extract_modified(archive, toc_entry);
         if (data == NULL) {
             PYI_ERROR("Failed to extract script from archive!\n");
             return -1;

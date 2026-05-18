@@ -217,7 +217,7 @@ end:
 }
 
 /*
- * Import (bootstrap) modules embedded in the PKG archive.
+ * Import (bootstrap) modules embedded in the PKG archive (disk).
  */
 int
 pyi_python_import_modules(const struct PYI_CONTEXT *pyi_ctx)
