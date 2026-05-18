@@ -92,6 +92,7 @@ static int _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx);
 
 static int _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_context);
 static int _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_context);
+static int _pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx);
 
 
 int
@@ -1432,7 +1433,7 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 
     /* Try opening embedded archive first */
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
-    pyi_ctx->archive_disk = pyi_archive_open(pyi_ctx->exe_buffer);
+    pyi_ctx->archive_disk = pyi_archive_open(pyi_ctx->executable_filename);
     if (pyi_ctx->archive_disk != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
         snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);

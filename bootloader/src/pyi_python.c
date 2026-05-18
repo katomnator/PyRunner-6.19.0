@@ -223,7 +223,7 @@ int
 pyi_python_import_modules(const struct PYI_CONTEXT *pyi_ctx)
 {
     const struct DYLIB_PYTHON *dylib_python = pyi_ctx->dylib_python;
-    const struct ARCHIVE *archive = pyi_ctx->archive;
+    const struct ARCHIVE *archive = pyi_ctx->archive_disk;
     const struct TOC_ENTRY *toc_entry;
     unsigned char *data;
     PyObject *co;

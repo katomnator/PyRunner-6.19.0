@@ -95,6 +95,7 @@ void pyi_archive_free(struct ARCHIVE **archive_ref);
 const struct TOC_ENTRY *pyi_archive_next_toc_entry(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry);
 
 unsigned char *pyi_archive_extract(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry);
+unsigned char *pyi_archive_extract_modified(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry);
 int pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *toc_entry, const char *output_filename);
 
 const struct TOC_ENTRY *pyi_archive_find_entry_by_name(const struct ARCHIVE *archive, const char *name);
