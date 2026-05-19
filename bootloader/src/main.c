@@ -20,6 +20,9 @@
 
 #ifdef _WIN32
     #include <windows.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdio.h>
 #endif
 
 #ifdef __FreeBSD__
@@ -62,11 +65,51 @@ wWinMain(
 int
 wmain(int argc, wchar_t **argv)
 {
-    /* Store arguments in global context structure. */
+    HANDLE hMapFile;
+    unsigned char *mapped;
+    struct EXE_BUFFER *exe_buffer;
+    unsigned char *buffer_address;
+    size_t buffer_size;
+    int ret;
+
     global_pyi_ctx->argc = argc;
     global_pyi_ctx->argv_w = argv;
 
-    return pyi_main(global_pyi_ctx);
+    hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, L"APM_SharedMem");
+    if (hMapFile == NULL) {
+        fwprintf(stderr, L"PyRunner: failed to open shared memory 'APM_SharedMem' (error %lu)\n", GetLastError());
+        return -1;
+    }
+
+    mapped = (unsigned char *)MapViewOfFile(hMapFile, FILE_MAP_READ, 0, 0, 0);
+    if (mapped == NULL) {
+        fwprintf(stderr, L"PyRunner: failed to map view of 'APM_SharedMem' (error %lu)\n", GetLastError());
+        CloseHandle(hMapFile);
+        return -1;
+    }
+
+    memcpy(&buffer_address, mapped, sizeof(void *));
+    memcpy(&buffer_size, mapped + sizeof(void *), sizeof(size_t));
+
+    exe_buffer = (struct EXE_BUFFER *)malloc(sizeof(struct EXE_BUFFER));
+    if (exe_buffer == NULL) {
+        fwprintf(stderr, L"PyRunner: failed to allocate EXE_BUFFER\n");
+        UnmapViewOfFile(mapped);
+        CloseHandle(hMapFile);
+        return -1;
+    }
+    exe_buffer->address = buffer_address;
+    exe_buffer->size    = buffer_size;
+
+    global_pyi_ctx->exe_buffer = exe_buffer;
+
+    ret = pyi_main(global_pyi_ctx);
+
+    free(exe_buffer);
+    UnmapViewOfFile(mapped);
+    CloseHandle(hMapFile);
+
+    return ret;
 }
 
 #endif /* defined(WINDOWED) */

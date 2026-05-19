@@ -473,7 +473,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
 
         /* Determine application's top-level directory based on the
          * executable's location. */
-        // pyi_path_dirname(executable_dir, pyi_ctx->executable_filename);
+        pyi_path_dirname(executable_dir, pyi_ctx->executable_filename);
 
 #if defined(__APPLE__)
         executable_dir_len = strnlen(executable_dir, PYI_PATH_MAX);
@@ -1083,7 +1083,7 @@ _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx)
     /* Start the child process that will execute user's program. */
     PYI_DEBUG("LOADER: starting the child process...\n");
     //ret = pyi_utils_create_child(pyi_ctx);
-    _pyi_main_onedir_or_onefile_child(pyi_ctx);
+    ret = _pyi_main_onedir_or_onefile_child(pyi_ctx);
 
     PYI_DEBUG("LOADER: child process exited (return code: %d)\n", ret);
 
@@ -1095,9 +1095,9 @@ _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx)
      *
      * If cleanup failed (and this is considered error; see the
      * implementation), modify the exit code. */
-    if (pyi_main_onefile_parent_cleanup(pyi_ctx) < 0) {
-        ret = -1;
-    }
+    // if (pyi_main_onefile_parent_cleanup(pyi_ctx) < 0) {
+    //     ret = -1;
+    // }
 
     /* Re-raise child's signal, if necessary (POSIX only) */
 #ifndef _WIN32
@@ -1437,8 +1437,9 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
     if (pyi_ctx->archive_disk != NULL) {
         /* Copy executable filename to archive filename; we know it does not exceed PYI_PATH_MAX */
         snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
-        return 0;
-    }
+        return 0;}
+    else {
+        return -1;}
 }
 
 
@@ -1451,8 +1452,10 @@ _pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx)
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
     pyi_ctx->archive = pyi_archive_open_modified(pyi_ctx->exe_buffer);
     if (pyi_ctx->archive != NULL) {
-        return 0;
-    }
+        return 0;}
+    else {
+        return -1;}
+}
 
     //PYI_DEBUG("LOADER: failed to open executable-embedded archive!\n");
 
@@ -1491,4 +1494,3 @@ _pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx)
     // }
 
     // return 0;
-}

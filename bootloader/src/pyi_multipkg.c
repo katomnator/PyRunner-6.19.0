@@ -102,7 +102,7 @@ _get_archive(struct PYI_CONTEXT *pyi_ctx, struct ARCHIVE **archive_pool, const c
 
     PYI_DEBUG("LOADER: archive not found in pool. Creating new entry...\n");
 
-    archive = pyi_archive_open(pyi_ctx->exe_buffer);
+    archive = pyi_archive_open_modified(pyi_ctx->exe_buffer);
     if (archive) {
         /* Store in the pool and return */
         archive_pool[index] = archive;
