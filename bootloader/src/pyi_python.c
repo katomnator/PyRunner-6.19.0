@@ -339,9 +339,20 @@ pyi_python_install_pyz(const struct PYI_CONTEXT *pyi_ctx)
         return -1;
     }
 
+    /* Build a Python bytes object from the entire exe_buffer */
+    PyObject *buffer_bytes = dylib_python->PyBytes_FromStringAndSize(
+        pyi_ctx->exe_buffer->address, pyi_ctx->exe_buffer->size);
+    if (buffer_bytes == NULL) {
+        PYI_ERROR("Failed to create bytes object for PYZ buffer\n");
+        return -1;
+    }
+
     /* Store into sys._pyinstaller_pyz */
     rc = dylib_python->PySys_SetObject(attr_name, pyz_path_obj);
+    dylib_python->PySys_SetObject("_pyinstaller_buffer", buffer_bytes);
+
     dylib_python->Py_DecRef(pyz_path_obj);
+    dylib_python->Py_DecRef(buffer_bytes);
 
     if (rc != 0) {
         PYI_ERROR("Failed to store path to PYZ archive into sys.%s!\n", attr_name);

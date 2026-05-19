@@ -18,6 +18,8 @@ import os
 import struct
 import marshal
 import zlib
+import io
+import sys as _sys
 
 # In Python3, the MAGIC_NUMBER value is available in the importlib module. However, in the bootstrap phase we cannot use
 # importlib directly, but rather its frozen variant.
@@ -56,25 +58,31 @@ class ZlibArchiveReader:
         # Parse header and load TOC. Standard header contains 12 bytes: PYZ magic pattern, python bytecode magic
         # pattern, and offset to TOC (32-bit integer). It might be followed by additional fields, depending on
         # implementation version.
-        with open(self._filename, "rb") as fp:
-            # Read PYZ magic pattern, located at the start of the file
-            fp.seek(self._start_offset, os.SEEK_SET)
+        self._buffer = getattr(_sys, '_pyinstaller_buffer', None)
 
-            magic = fp.read(len(self._PYZ_MAGIC_PATTERN))
-            if magic != self._PYZ_MAGIC_PATTERN:
-                raise ArchiveReadError("PYZ magic pattern mismatch!")
+        # with open(self._filename, "rb") as fp:
+        self._fp = io.BytesIO(self._buffer)
 
-            # Read python magic/version number
-            pymagic = fp.read(len(PYTHON_MAGIC_NUMBER))
-            if check_pymagic and pymagic != PYTHON_MAGIC_NUMBER:
-                raise ArchiveReadError("Python magic pattern mismatch!")
+        # Read PYZ magic pattern, located at the start of the file
+        self._fp.seek(self._start_offset, os.SEEK_SET)
 
-            # Read TOC offset
-            toc_offset, *_ = struct.unpack('!i', fp.read(4))
+        magic = self._fp.read(len(self._PYZ_MAGIC_PATTERN))
+        if magic != self._PYZ_MAGIC_PATTERN:
+            raise ArchiveReadError("PYZ magic pattern mismatch!")
 
-            # Load TOC
-            fp.seek(self._start_offset + toc_offset, os.SEEK_SET)
-            self.toc = dict(marshal.load(fp))
+        # Read python magic/version number
+        pymagic = self._fp.read(len(PYTHON_MAGIC_NUMBER))
+        if check_pymagic and pymagic != PYTHON_MAGIC_NUMBER:
+            raise ArchiveReadError("Python magic pattern mismatch!")
+
+        # Read TOC offset
+        toc_offset, *_ = struct.unpack('!i', self._fp.read(4))
+
+        # Load TOC
+        self._fp.seek(self._start_offset + toc_offset, os.SEEK_SET)
+        self.toc = dict(marshal.load(self._fp))
+
+        
 
     @staticmethod
     def _parse_offset_from_filename(filename):
@@ -116,9 +124,9 @@ class ZlibArchiveReader:
 
         # Read data blob
         try:
-            with open(self._filename, "rb") as fp:
-                fp.seek(self._start_offset + entry_offset)
-                obj = fp.read(entry_length)
+            # with open(self._filename, "rb") as fp:
+            self._fp.seek(self._start_offset + entry_offset)
+            obj = self._fp.read(entry_length)
         except FileNotFoundError:
             # We open the archive file each time we need to read from it, to avoid locking the file by keeping it open.
             # This allows executable to be deleted or moved (renamed) while it is running, which is useful in certain
