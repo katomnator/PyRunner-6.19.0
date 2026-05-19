@@ -229,6 +229,10 @@ PYI_EXT_FUNC_PROTO(PyObject *, PyUnicode_FromString, (const char *))
 PYI_EXT_FUNC_PROTO(PyObject *, PyUnicode_Join, (PyObject *, PyObject *))
 PYI_EXT_FUNC_PROTO(PyObject *, PyUnicode_Replace, (PyObject *, PyObject *, PyObject *, Py_ssize_t))
 
+/* PyBytes */
+PYI_EXT_FUNC_PROTO(PyObject *, PyBytes_FromStringAndSize, (const char *, Py_ssize_t))
+PYI_EXT_FUNC_PROTO(PyObject *, PyLong_FromUnsignedLongLong, (unsigned long long))
+
 /* The actual function-pointer structure */
 struct DYLIB_PYTHON
 {
@@ -308,6 +312,9 @@ struct DYLIB_PYTHON
     PYI_EXT_FUNC_ENTRY(PyUnicode_FromString)
     PYI_EXT_FUNC_ENTRY(PyUnicode_Join)
     PYI_EXT_FUNC_ENTRY(PyUnicode_Replace)
+
+    PYI_EXT_FUNC_ENTRY(PyBytes_FromStringAndSize)
+    PYI_EXT_FUNC_ENTRY(PyLong_FromUnsignedLongLong)
 };
 
 struct DYLIB_PYTHON *pyi_dylib_python_load(const char *root_directory, const char *python_libname, int python_version);

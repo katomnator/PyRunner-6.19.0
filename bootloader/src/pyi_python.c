@@ -331,9 +331,7 @@ pyi_python_install_pyz(const struct PYI_CONTEXT *pyi_ctx)
      * which we actually have no guarantee, but thankfully that does
      * seem to be the case. */
     pyz_offset = pyi_ctx->archive->pkg_offset + toc_entry->offset;
-    unsigned long long buffer_address = (unsigned long long) pyi_ctx->exe_buffer->address;
-    unsigned long long buffer_size = (unsigned long long) pyi_ctx->exe_buffer->size;
-    pyz_path_obj = dylib_python->PyUnicode_FromFormat("%U?%llu?%llu?%llu", archive_filename_obj, pyz_offset, buffer_address, buffer_size);
+    pyz_path_obj = dylib_python->PyUnicode_FromFormat("%U?%llu", archive_filename_obj, pyz_offset);
     dylib_python->Py_DecRef(archive_filename_obj);
 
     if (pyz_path_obj == NULL) {

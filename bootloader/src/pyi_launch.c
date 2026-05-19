@@ -444,7 +444,7 @@ pyi_launch_execute(struct PYI_CONTEXT *pyi_ctx)
         return -1;
     }
 
-    /* Import core pyinstaller modules from the executable - bootstrap */
+    /* Import core pyinstaller modules from the executable (disk) - bootstrap */
     if (pyi_python_import_modules(pyi_ctx)) {
         return -1;
     }
