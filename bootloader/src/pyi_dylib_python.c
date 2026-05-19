@@ -223,6 +223,9 @@ static int _pyi_dylib_python_import_symbols(struct DYLIB_PYTHON *dylib)
     _IMPORT_FUNCTION(PyUnicode_Join)
     _IMPORT_FUNCTION(PyUnicode_Replace)
 
+    _IMPORT_FUNCTION(PyBytes_FromStringAndSize)
+    _IMPORT_FUNCTION(PyLong_FromUnsignedLongLong)
+
 #undef _IMPORT_FUNCTION
 
     return 0;
