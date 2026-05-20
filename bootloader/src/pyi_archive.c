@@ -189,6 +189,7 @@ _pyi_archive_extract_compressed_modified(unsigned char *toc_entry_address, const
         //     goto cleanup;
         // }
         memcpy(buffer_in, toc_entry_address, chunk_size);
+        toc_entry_address += chunk_size;
         remaining_size -= chunk_size;
 
         /* Run inflate() on input until output buffer is not full. */
@@ -269,6 +270,7 @@ _pyi_archive_extract2fs_uncompressed(unsigned char *toc_entry_address, const str
         //     break;
         // }
         memcpy(buffer, toc_entry_address, chunk_size);
+        toc_entry_address += chunk_size;
         if (fwrite(buffer, chunk_size, 1, out_fp) < 1) {
             PYI_PERROR("fwrite", "Failed to extract %s: failed to write data chunk!\n", toc_entry->name);
             rc = -1;
@@ -327,6 +329,7 @@ _pyi_archive_extract_uncompressed_modified(unsigned char *toc_entry_address, con
         //     return -1;
         // }
         memcpy(buffer, toc_entry_address, chunk_size);
+        toc_entry_address += chunk_size;
         remaining_size -= chunk_size;
         buffer += chunk_size;
     }
@@ -405,6 +408,12 @@ pyi_archive_extract_modified(const struct ARCHIVE *archive, const struct TOC_ENT
     // }
 
     toc_entry_address = archive->exe_buffer->address + archive->pkg_offset + toc_entry->offset;
+
+    /* Bounds check: compressed length of entry must fit within the buffer */
+    if ((uint64_t)archive->pkg_offset + toc_entry->offset + toc_entry->length > archive->exe_buffer->size) {
+        PYI_ERROR("Failed to extract %s: entry data exceeds buffer bounds!\n", toc_entry->name);
+        goto cleanup;
+    }
 
     /* Allocate the data buffer */
     data = (unsigned char *)malloc(toc_entry->uncompressed_length);
@@ -497,11 +506,18 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
 
     toc_entry_address = archive->exe_buffer->address + archive->pkg_offset + toc_entry->offset;
 
+    /* Bounds check: compressed length of entry must fit within the buffer */
+    if ((uint64_t)archive->pkg_offset + toc_entry->offset + toc_entry->length > archive->exe_buffer->size) {
+        PYI_ERROR("Failed to extract %s: entry data exceeds buffer bounds!\n", toc_entry->name);
+        rc = -1;
+        goto cleanup_fp;
+    }
+
     /* Extract */
     if (toc_entry->compression_flag == 1) {
         rc = _pyi_archive_extract_compressed_modified(toc_entry_address, toc_entry, out_fp, NULL);
     } else {
-        rc = _pyi_archive_extract2fs_uncompressed_modified(toc_entry_address, toc_entry, out_fp);
+        rc = _pyi_archive_extract2fs_uncompressed(toc_entry_address, toc_entry, out_fp);
     }
 #ifndef WIN32
     if (toc_entry->typecode == ARCHIVE_ITEM_BINARY) {
@@ -511,11 +527,7 @@ pyi_archive_extract2fs(const struct ARCHIVE *archive, const struct TOC_ENTRY *to
     }
 #endif
 
-cleanup:
-    /* Might be NULL if we jumped here due to fopen() failure */
-    // if (archive_fp) {
-    //     fclose(archive_fp);
-    // }
+cleanup_fp:
     fclose(out_fp);
 
     return rc;
@@ -549,7 +561,7 @@ _pyi_archive_find_pkg_cookie_offset(FILE *fp)
  * Returns offset within the buffer if MAGIC pattern is found, 0 otherwise. (modified)
  */
 static uint64_t
-_pyi_archive_find_pkg_cookie_offset_modified(const struct EXE_BUFFER *exe_buffer)
+_pyi_archive_find_pkg_cookie_offset_modified(struct EXE_BUFFER *exe_buffer)
 {
     /* Prepare MAGIC pattern; we need to do this programmatically to
      * prevent the pattern itself being stored in the code and matched
@@ -705,7 +717,7 @@ cleanup:
  * Open the archive from buffer.
  */
 struct ARCHIVE *
-pyi_archive_open_modified(const struct EXE_BUFFER *exe_buffer)
+pyi_archive_open_modified(struct EXE_BUFFER *exe_buffer)
 {
     // FILE *archive_fp = NULL;
     uint64_t cookie_pos = 0;

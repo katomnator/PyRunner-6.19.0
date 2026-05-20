@@ -51,6 +51,8 @@ class ZlibArchiveReader:
 
         self.toc = {}
 
+        print("!!! MODIFIED PYTHON BOOTSTRAP !!!")
+
         # If no offset is given, try inferring it from filename
         if start_offset is None:
             self._filename, self._start_offset = self._parse_offset_from_filename(filename)

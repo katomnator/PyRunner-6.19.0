@@ -273,6 +273,7 @@ pyi_utils_find_magic_pattern_modified(struct EXE_BUFFER *exe_buffer, const unsig
     //     goto cleanup;
     // }
     end_pos = (uint64_t)exe_buffer->size;
+    PYI_DEBUG("LOADER: end_pos = %llu | megic_len = %zu\n", end_pos, magic_len);
 
     /* Sanity check */
     if (end_pos < magic_len) {

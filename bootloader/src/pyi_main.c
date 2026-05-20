@@ -109,6 +109,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     setbuf(stderr, (char *)NULL);
 #endif  /* _WIN32 */
 
+    PYI_DEBUG("PyRunner v6.19.0\n");
     PYI_DEBUG("PyInstaller Bootloader 6.x\n");
 
     /* In debug builds, dump the command-line arguments. */
@@ -1429,8 +1430,6 @@ _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
 static int
 _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 {
-    int status;
-
     /* Try opening embedded archive first */
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
     pyi_ctx->archive_disk = pyi_archive_open(pyi_ctx->executable_filename);
@@ -1446,8 +1445,6 @@ _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 static int
 _pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx)
 {
-    int status;
-
     /* Try opening embedded archive first */
     PYI_DEBUG("LOADER: trying to load executable-embedded archive...\n");
     pyi_ctx->archive = pyi_archive_open_modified(pyi_ctx->exe_buffer);
