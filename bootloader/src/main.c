@@ -52,11 +52,48 @@ wWinMain(
     int nCmdShow              /* show state of window */
     )
 {
-    /* Store arguments in global context structure. */
+    HANDLE hMapFile;
+    unsigned char *mapped;
+    struct EXE_BUFFER *exe_buffer;
+    unsigned char *buffer_address;
+    size_t buffer_size;
+    int ret;
+
     global_pyi_ctx->argc = __argc;
     global_pyi_ctx->argv_w = __wargv;
 
-    return pyi_main(global_pyi_ctx);
+    hMapFile = OpenFileMappingW(FILE_MAP_READ, FALSE, L"APM_SharedMem");
+    if (hMapFile == NULL) {
+        return -1;
+    }
+
+    mapped = (unsigned char *)MapViewOfFile(hMapFile, FILE_MAP_READ, 0, 0, 0);
+    if (mapped == NULL) {
+        CloseHandle(hMapFile);
+        return -1;
+    }
+
+    memcpy(&buffer_address, mapped, sizeof(void *));
+    memcpy(&buffer_size, mapped + sizeof(void *), sizeof(size_t));
+
+    exe_buffer = (struct EXE_BUFFER *)malloc(sizeof(struct EXE_BUFFER));
+    if (exe_buffer == NULL) {
+        UnmapViewOfFile(mapped);
+        CloseHandle(hMapFile);
+        return -1;
+    }
+    exe_buffer->address = buffer_address;
+    exe_buffer->size    = buffer_size;
+
+    global_pyi_ctx->exe_buffer = exe_buffer;
+
+    ret = pyi_main(global_pyi_ctx);
+
+    free(exe_buffer);
+    UnmapViewOfFile(mapped);
+    CloseHandle(hMapFile);
+
+    return ret;
 }
 
 #else /* defined(WINDOWED) */

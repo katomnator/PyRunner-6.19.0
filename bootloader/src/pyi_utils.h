@@ -38,18 +38,6 @@ int pyi_recursive_rmdir(const char *dir);
 int pyi_create_parent_directory_tree(const struct PYI_CONTEXT *pyi_ctx, const char *prefix_path, const char *filename);
 int pyi_copy_file(const char *src_filename, const char *dest_filename);
 
-#if !defined(_WIN32) && !defined(__APPLE__)
-int pyi_utils_set_library_search_path(const char *path);
-#endif
-
-/* Argument handling (POSIX only) */
-#if !defined(_WIN32)
-int pyi_utils_initialize_args(struct PYI_CONTEXT *pyi_ctx, const int argc, char *const argv[]);
-int pyi_utils_append_to_args(struct PYI_CONTEXT *pyi_ctx, const char *arg);
-void pyi_utils_free_args(struct PYI_CONTEXT *pyi_ctx);
-char *const *pyi_prepend_dynamic_loader_to_argv(const int argc, char *const argv[], char *const loader_filename);
-#endif
-
 /* Magic pattern matching */
 extern const unsigned char MAGIC_BASE[8];
 uint64_t pyi_utils_find_magic_pattern(FILE *fp, const unsigned char *magic, size_t magic_len);

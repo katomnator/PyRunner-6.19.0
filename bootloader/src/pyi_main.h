@@ -17,11 +17,6 @@
 #include "pyi_global.h"
 #include <stddef.h>
 
-#ifndef _WIN32
-    #include <sys/types.h> /* pid_t */
-#endif
-
-
 struct ARCHIVE;
 struct DYLIB_PYTHON;
 
@@ -70,38 +65,8 @@ struct PYI_CONTEXT
      * strings from `argv` are also used in other places, for example,
      * when trying to resolve the executable's true location, and when
      * spawning child process in onefile mode. */
-#ifdef _WIN32
     int argc;
     wchar_t **argv_w;
-#else
-    int argc;
-    char **argv;
-
-    /* A copy of command-line arguments, so that PyInstaller can manipulate
-     * them if necessary.
-     *
-     * For example, in macOS .app bundles, we need to remove the `-psnxxx`
-     * argument. Furthermore, if argv-emulation is enabled for macOS .app
-     * bundles, we receive AppleEvents and convert them to command-line
-     * arguments.
-     *
-     * These two fields are initialized only if needed, for example in
-     * codepaths that involve macOS app bundles. Look for calls to the
-     * `pyi_utils_initialize_args` function.
-     *
-     * While setting up the embedded python interpreter configuration,
-     * the corresponding codepath automatically chooses between argc/argv
-     * and pyi_argc/pyi_argv depending on the availability of the latter.
-     * This means that if `pyi_utils_initialize_args` was called at
-     * some point before, the modified arguments are passed on to the
-     * python interpreter (and will appear in sys.argv).
-     *
-     * Similarly, when spawning the child process of a onefile application,
-     * we pass pyi_argv to the `execvp` call if available, and if not,
-     * we use the original argv. */
-    int pyi_argc;
-    char **pyi_argv;
-#endif /* ifdef _WIN32 */
 
     /* Contains the address and size of the buffer that holds our pyinstaller exe (tool) */
     struct EXE_BUFFER *exe_buffer;
@@ -142,14 +107,6 @@ struct PYI_CONTEXT
      * run-time detection of duplicated resources in onefile archives on
      * PyInstaller's CI. */
     unsigned char strict_unpack_mode;
-
-#if !defined(_WIN32)
-    /* Path to the dynamic linker/loader; if executable is launched
-     * via explicitly specified dynamic linker/loader (for example,
-     * /lib64/ld-linux-x86-64.so.2 /path/to/executable), we need to
-     * propagate its name into execvp() call. */
-    char dynamic_loader_filename[PYI_PATH_MAX];
-#endif /* !defined(_WIN32) */
 
 #if defined(_WIN32)
     /* Security attributes structure with security descriptor that limits

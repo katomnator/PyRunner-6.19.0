@@ -15,30 +15,11 @@
  * Bootloader for a packed executable.
  */
 
-#ifdef _WIN32
-    #include <windows.h>
-    #include <wchar.h>
-#else
-    #include <unistd.h>
-    #include <errno.h>
-#endif
-
-#ifdef __CYGWIN__
-    #include <sys/cygwin.h>  /* cygwin_conv_path */
-    #include <windows.h>  /* SetDllDirectoryW */
-#endif
-
-#include <stdio.h>  /* FILE */
-#include <stdlib.h> /* calloc */
-#include <string.h> /* memset */
-
-#if defined(__APPLE__) && defined(WINDOWED)
-    #include <Carbon/Carbon.h>  /* TransformProcessType */
-#endif
-
-#if defined(__APPLE__)
-    #include <mach-o/dyld.h>  /* _NSGetExecutablePath() */
-#endif
+#include <windows.h>
+#include <wchar.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* PyInstaller headers. */
 #include "pyi_main.h"
@@ -92,13 +73,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     char *env_var_value;
     bool reset_environment;
 
-#ifdef _WIN32
-    /* On Windows, both Visual C runtime and MinGW seem to buffer stderr
-     * when redirected. This might cause the output to not appear at all
-     * if the application crashes or is terminated, which in turn makes
-     * debugging difficult. So make sure that stderr is unbuffered. */
     setbuf(stderr, (char *)NULL);
-#endif  /* _WIN32 */
 
     PYI_DEBUG("PyRunner v6.19.0\n");
     PYI_DEBUG("PyInstaller Bootloader 6.x\n");
@@ -240,68 +215,18 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
         }
     } else {
         char executable_dir[PYI_PATH_MAX];
-        bool is_macos_app_bundle = false;
-#if defined(__APPLE__)
-        size_t executable_dir_len;
-#endif
-
-        /* Determine application's top-level directory based on the
-         * executable's location. */
         pyi_path_dirname(executable_dir, pyi_ctx->executable_filename);
-
-#if defined(__APPLE__)
-        executable_dir_len = strnlen(executable_dir, PYI_PATH_MAX);
-        is_macos_app_bundle = executable_dir_len > 19 && strncmp(executable_dir + executable_dir_len - 19, ".app/Contents/MacOS", 19) == 0;
-#endif
-
-        if (is_macos_app_bundle) {
-            /* macOS .app bundle; relocate top-level application directory
-             * from Contents/MacOS directory to Contents/Frameworks */
-            char contents_dir[PYI_PATH_MAX]; /* the parent Contents directory */
-            pyi_path_dirname(contents_dir, executable_dir);
-            pyi_path_join(pyi_ctx->application_home_dir, contents_dir, "Frameworks");
+        if (pyi_ctx->contents_subdirectory) {
+            pyi_path_join(pyi_ctx->application_home_dir, executable_dir, pyi_ctx->contents_subdirectory);
         } else {
-            if (pyi_ctx->contents_subdirectory) {
-                pyi_path_join(pyi_ctx->application_home_dir, executable_dir, pyi_ctx->contents_subdirectory);
-            } else {
-                snprintf(pyi_ctx->application_home_dir, PYI_PATH_MAX, "%s", executable_dir);
-            }
+            snprintf(pyi_ctx->application_home_dir, PYI_PATH_MAX, "%s", executable_dir);
         }
     }
 
     PYI_DEBUG("LOADER: application's top-level directory: %s\n", pyi_ctx->application_home_dir);
 
-    /* Perform necessary modifications to library search path. Do so
-     * before we start loading bundled shared libraries (i.e., before
-     * trying to start the splash screen, if available). */
-#if defined(_WIN32)
-    /* In onefile parent process on Windows, attempt to pre-emptively
-     * load system copies of VC runtime DLLs (e.g., VCRUNTIME140.dll
-     * and VCRUNTIME140_1.dll). The bootloader itself has no need for
-     * these DLLs - when building bootloader with MSVC, we statically
-     * link both the CRT and VC runtime into the bootloader executable
-     * (which allows the onefile executable to be launched on systems
-     * without VC redistributable installed and without having to place
-     * the VC runtime DLLs next to the executable). However, we need to
-     * prevent the bundled copies from application's temporary directory
-     * (which are used for example by python shared library loaded in
-     * the *child* process of onefile build) from being loaded into this
-     * process, because we might end up being unable to unload them and
-     * thus remove the files during the cleanup..
-     *
-     * This issue seems to be caused by the OS, an anti-virus program,
-     * or a 3rd party component injecting additional DLLs into our
-     * process, and those additional DLLs depending on the VC runtime.
-     * Initially, this seemed to affect only builds with splash screen
-     * (see the follow-up discussion under #7106), because we need to
-     * load Tcl/Tk DLLs, and those depend on the VC runtime; since we
-     * unload Tcl/Tk DLLs during splash screen teardown, we free the
-     * references on the VC runtime, and are usually able to also unload
-     * VC runtime DLLs. This is not the case, however, if the VC runtime
-     * DLLs remain locked due to injection of other 3rd party DLLs.
-     * #9075 has shown that injection of 3rd party DLLs and subsequent
-     * locking of VC runtime DLLs can also happen without splash screen,
-     * so we now perform this pre-load in all onefile parent processes. */
+    /* Pre-emptively load system copies of VC runtime DLLs to prevent
+     * bundled copies from being loaded into this process. */
     if (pyi_ctx->is_onefile) {
         const wchar_t *dll_names[] = {
             L"VCRUNTIME140.dll",
@@ -309,16 +234,9 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
         };
         int i;
 
-        /* Avoid accidentally picking up the DLLs from another
-         * (instance of) frozen application that might have launched
-         * this instance. I.e., call SetDllDirectoryW(NULL) to reset
-         * the search path modification that happens in the code block
-         * that follows this one (and is inherited by child processes). */
         SetDllDirectoryW(NULL);
-
         for (i = 0; i < sizeof(dll_names) / sizeof(dll_names[0]); i++) {
             const wchar_t *dll_name = dll_names[i];
-
             PYI_DEBUG_W(L"LOADER: attempting to pre-load system copy of %ls...\n", dll_name);
             if (LoadLibraryExW(dll_name, NULL, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)) {
                 PYI_DEBUG_W(L"LOADER: successfully loaded system copy of %ls.\n", dll_name);
@@ -328,10 +246,8 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
         }
     }
 
-    /* Set the DLL search path using `SetDllDirectoryW()`; the change takes
-     * effect within the calling process, so we can make this call in
-     * each process and regardless of onefile vs. onedir mode. */
-    if (1) {
+    /* Set the DLL search path. */
+    {
         wchar_t dllpath_w[PYI_PATH_MAX];
         if (pyi_win32_utf8_to_wcs(pyi_ctx->application_home_dir, dllpath_w, PYI_PATH_MAX) == NULL) {
             PYI_ERROR("Failed to convert DLL search path!\n");
@@ -340,64 +256,6 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
         PYI_DEBUG_W(L"LOADER: calling SetDllDirectoryW: %ls\n", dllpath_w);
         SetDllDirectoryW(dllpath_w);
     }
-#elif defined(__CYGWIN__)
-    /* Under Cygwin, `dlopen()` uses `LD_LIBRARY_PATH` environment
-     * variable for library names that do not include path to the
-     * library file. However, linked libraries are resolved using
-     * Windows' loader, which is controlled by `SetDllDirectoryW()`.
-     * Therefore, we need to modify the search path of both mechanisms.
-     *
-     * Failing to call `SetDllDirectoryW` results in dependencies
-     * of python shared library not being resolved when running the
-     * frozen application outside of the Cygwin environment.
-     *
-     * Failing to set `LD_LIBRARY_PATH` seems to cause segmentation
-     * faults in worker processes when `multiprocessing` is used
-     * (both inside and outside of the Cygwin environment). */
-    if (1) {
-        wchar_t dllpath_w[PYI_PATH_MAX];
-        bool modify_ld_library_path;
-
-        /* Convert POSIX path (whose root is determined by location of
-         * the cygwin1.dll) into (wide-char) Windows path that can be
-         * passed to `SetDllDirectoryW`. */
-        if (cygwin_conv_path(CCP_POSIX_TO_WIN_W | CCP_RELATIVE, pyi_ctx->application_home_dir, dllpath_w, PYI_PATH_MAX) != 0) {
-            PYI_PERROR("cygwin_conv_path", "Failed to convert DLL search path!\n");
-            return -1;
-        }
-
-        /* On Cygwin, we do not have PYI_DEBUG_W macro available; so
-         * use %S format to try printing the wide-char string. We can
-         * be fairly certain that compiler is not MSVC, so %S does mean
-         * wide-char in this context; there might still be garbled text
-         * if string contains Unicode characters, but we will take the
-         * risk... */
-        PYI_DEBUG("LOADER: calling SetDllDirectoryW: %S\n", dllpath_w);
-        SetDllDirectoryW(dllpath_w);
-
-        /* Modify `LD_LIBRARY_PATH`, but only if we are the parent process
-         * of onefile application, or main process of onedir application.
-         * Their child processes will inherit the environment variable,
-         * and the attempt to modify it again would result in duplicated
-         * entries (and clobbered `LD_LIBRARY_PATH_ORIG`). */
-        modify_ld_library_path = pyi_ctx->is_onefile;
-        if (modify_ld_library_path) {
-            if (pyi_utils_set_library_search_path(pyi_ctx->application_home_dir) < 0) {
-                PYI_ERROR("Failed to set library search path via environment variable!\n");
-                return -1;
-            }
-        }
-    }
-#elif defined(__APPLE__)
-    /* No changes to library search path are required on macOS, because
-     * we rewrite the library paths on collected binaries. */
-#else
-    /* Other POSIX OSes; set LD_LIBRARY_PATH for bundled library discovery. */
-    if (pyi_utils_set_library_search_path(pyi_ctx->application_home_dir) == -1) {
-        PYI_ERROR("Failed to set library search path via environment variable!\n");
-        return -1;
-    }
-#endif
 
     if (pyi_ctx->is_onefile) {
         return _pyi_main_onefile_parent(pyi_ctx);
@@ -413,11 +271,7 @@ _pyi_main_dump_command_line_arguments(const struct PYI_CONTEXT *pyi_ctx)
 {
     int i;
     for (i = 0; i < pyi_ctx->argc; i++) {
-#if defined(_WIN32)
         PYI_DEBUG_W(L"LOADER: argv[%d]: %ls\n", i, pyi_ctx->argv_w[i]);
-#else
-        PYI_DEBUG("LOADER: argv[%d]: %s\n", i, pyi_ctx->argv[i]);
-#endif
     }
 }
 
@@ -596,8 +450,6 @@ _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx)
 /**********************************************************************\
  *                     Executable file resolution                     *
 \**********************************************************************/
-#ifdef _WIN32
-
 static int
 _pyi_resolve_executable_win32(char *executable_filename)
 {
@@ -644,181 +496,12 @@ _pyi_resolve_executable_win32(char *executable_filename)
     return 0;
 }
 
-#elif __APPLE__
-
-static int
-_pyi_resolve_executable_macos(char *executable_filename)
-{
-    char program_path[PYI_PATH_MAX];
-    uint32_t name_length = sizeof(program_path);
-
-    /* macOS has special function to obtain path to executable.
-     * This may return a symbolic link. */
-    if (_NSGetExecutablePath(program_path, &name_length) != 0) {
-        PYI_ERROR("Failed to obtain executable path via _NSGetExecutablePath!\n");
-        return -1;
-    }
-
-    /* Canonicalize the filename and resolve symbolic links */
-    if (realpath(program_path, executable_filename) == NULL) {
-        PYI_DEBUG("LOADER: failed to resolve full path for %s\n", program_path);
-        return -1;
-    }
-
-    return 0;
-}
-
-#else
-
-#if defined(__linux__)
-
-/* Return 1 if the given executable name is in fact the ld.so dynamic loader. */
-static bool
-_pyi_is_ld_linux_so(const char *filename)
-{
-    char basename[PYI_PATH_MAX];
-    int status;
-    char loader_name[65] = "";
-    int soversion = 0;
-
-    pyi_path_basename(basename, filename);
-
-    /* Match the string against ld-*.so.X. In sscanf, the %s is greedy, so
-     * instead we match with character group that disallows dot (.). Also
-     * limit the name length; note that the output array must be one byte
-     * larger, to include the terminating NULL character. */
-    status = sscanf(basename, "ld-%64[^.].so.%d", loader_name, &soversion);
-    if (status != 2) {
-        return false;
-    }
-
-    /* If necessary, we could further validate the loader name and soversion
-     * against known patterns:
-     *  - ld-linux.so.2 (glibc, x86)
-     *  - ld-linux-x86-64.so.2 (glibc, x86_64)
-     *  - ld-linux-x32.so.2 (glibc, x32)
-     *  - ld-linux-aarch64.so.1 (glibc, aarch64)
-     *  - ld-musl-x86_64.so.1 (musl, x86_64)
-     *  - ...
-     */
-
-    return true;
-}
-
-#endif /* defined(__linux__) */
-
-/* Search $PATH for the program with the given name, and return its full path. */
-static bool
-_pyi_find_progam_in_search_path(const char *name, char *result_path)
-{
-    char *search_paths = pyi_getenv("PATH"); /* returns a copy */
-    char *search_path;
-
-    if (search_paths == NULL) {
-        return false;
-    }
-
-    search_path = strtok(search_paths, PYI_PATHSEPSTR);
-    while (search_path != NULL) {
-        if ((pyi_path_join(result_path, search_path, name) != NULL) && pyi_path_exists(result_path)) {
-            free(search_paths);
-            return true;
-        }
-        search_path = strtok(NULL, PYI_PATHSEPSTR);
-    }
-
-    free(search_paths);
-    return false;
-}
-
-static int
-_pyi_resolve_executable_posix(const char *argv0, char *executable_filename, char *loader_filename)
-{
-    /* On Linux, Cygwin, FreeBSD, and Solaris, we try /proc entry first.
-     * The entry points at "true" file location, i.e., fully canonicalized
-     * and with all symbolic links resolved. */
-    ssize_t name_len = -1;
-
-#if defined(__linux__) || defined(__CYGWIN__)
-    name_len = readlink("/proc/self/exe", executable_filename, PYI_PATH_MAX - 1);  /* Linux, Cygwin */
-#elif defined(__FreeBSD__)
-    name_len = readlink("/proc/curproc/file", executable_filename, PYI_PATH_MAX - 1);  /* FreeBSD */
-#elif defined(__sun)
-    name_len = readlink("/proc/self/path/a.out", executable_filename, PYI_PATH_MAX - 1);  /* Solaris */
-#endif
-
-    if (name_len != -1) {
-        /* Output is not yet NULL-terminated, so we need to do it using returned byte count. */
-        executable_filename[name_len] = 0;
-    }
-
-    /* On linux, we might have been launched using custom ld.so dynamic loader.
-     * In that case, /proc/self/exe points to the ld.so executable, and we need
-     * to ignore it. */
-#if defined(__linux__)
-    if (_pyi_is_ld_linux_so(executable_filename) == true) {
-        PYI_DEBUG("LOADER: resolved executable file %s is ld.so dynamic linker/loader - storing its name.\n", executable_filename);
-        strncpy(loader_filename, executable_filename, PYI_PATH_MAX); /* both buffers are guaranteed to be PYI_PATH_MAX-sized */
-        name_len = -1;
-    }
-#endif
-
-    if (name_len != -1) {
-        return 0;
-    }
-
-    /* We failed to resolve the executable file via /proc (or we were
-     * launched via ld.so dynamic loader). Try to manually resolve the
-     * program path/name given via argv[0]. */
-    if (strchr(argv0, PYI_SEP)) {
-        /* Absolute or relative path was given. Canonicalize it, and
-         * resolve symbolic links. */
-        PYI_DEBUG("LOADER: resolving program path from argv[0]: %s\n", argv0);
-        if (realpath(argv0, executable_filename) == NULL) {
-            PYI_DEBUG("LOADER: failed to resolve full path for %s\n", argv0);
-            return -1;
-        }
-    } else {
-        /* No path, just program name. Search $PATH for executable with
-         * matching name. */
-        char program_path[PYI_PATH_MAX];
-
-        if (_pyi_find_progam_in_search_path(argv0, program_path)) {
-            /* Program found in $PATH; resolve full path */
-            PYI_DEBUG("LOADER: program %s found in PATH: %s. Resolving full path...\n", argv0, program_path);
-            if (realpath(program_path, executable_filename) == NULL) {
-                PYI_DEBUG("LOADER: failed to resolve full path for %s\n", program_path);
-                return -1;
-            }
-        } else {
-            /* Searching $PATH failed; try resolving the name as-is,
-             * and hope for the best. NOTE: can we even reach this part?
-             * How was the executable even launched in such case? */
-            PYI_DEBUG("LOADER: could not find %s in $PATH! Attempting to resolve as-is...\n", argv0);
-            if (realpath(argv0, executable_filename) == NULL) {
-                PYI_DEBUG("LOADER: failed to resolve full path for %s\n", argv0);
-                return -1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-#endif
 
 
 static int
 _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
 {
-    /* Resolve using OS-specific implementation */
-#ifdef _WIN32
     return _pyi_resolve_executable_win32(pyi_ctx->executable_filename);
-#elif __APPLE__
-    return _pyi_resolve_executable_macos(pyi_ctx->executable_filename);
-#else
-    return _pyi_resolve_executable_posix(pyi_ctx->argv[0], pyi_ctx->executable_filename, pyi_ctx->dynamic_loader_filename);
-#endif
 }
 
 
