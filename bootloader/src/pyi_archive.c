@@ -579,15 +579,10 @@ static bool
 _pyi_archive_is_extractable(char typecode)
 {
     switch (typecode) {
-        /* onefile mode */
         case ARCHIVE_ITEM_BINARY:
         case ARCHIVE_ITEM_DATA:
         case ARCHIVE_ITEM_ZIPFILE:
         case ARCHIVE_ITEM_SYMLINK: {
-            return true;
-        }
-        /* MERGE mode */
-        case ARCHIVE_ITEM_DEPENDENCY: {
             return true;
         }
         default: {
@@ -695,11 +690,6 @@ pyi_archive_open(const char *filename)
 
         /* Check if entry is extractable */
         archive->contains_extractable_entries |= _pyi_archive_is_extractable(toc_entry->typecode);
-
-        /* Check if this is SPLASH entry */
-        if (toc_entry->typecode == ARCHIVE_ITEM_SPLASH) {
-            archive->toc_splash = toc_entry;
-        }
 
         /* Jump to next entry; with the current entry fixed up, we can
          * use non-const equivalent of pyi_archive_next_toc_entry() */
@@ -817,11 +807,6 @@ pyi_archive_open_modified(struct EXE_BUFFER *exe_buffer)
 
         /* Check if entry is extractable */
         archive->contains_extractable_entries |= _pyi_archive_is_extractable(toc_entry->typecode);
-
-        /* Check if this is SPLASH entry */
-        if (toc_entry->typecode == ARCHIVE_ITEM_SPLASH) {
-            archive->toc_splash = toc_entry;
-        }
 
         /* Jump to next entry; with the current entry fixed up, we can
          * use non-const equivalent of pyi_archive_next_toc_entry() */

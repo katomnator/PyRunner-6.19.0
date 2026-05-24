@@ -30,11 +30,9 @@
 #include "pyi_archive.h"
 #include "pyi_main.h"
 #include "pyi_utils.h"
-#include "pyi_splash.h"
 #include "pyi_dylib_python.h"
 #include "pyi_python.h"
 #include "pyi_exception_dialog.h"
-#include "pyi_multipkg.h"
 
 
 /*
@@ -53,54 +51,23 @@ pyi_launch_extract_files_from_archive(struct PYI_CONTEXT *pyi_ctx)
 {
     const struct ARCHIVE *archive = pyi_ctx->archive;
     const struct TOC_ENTRY *toc_entry;
-    ptrdiff_t index;
     int retcode = 0;
     char output_filename[PYI_PATH_MAX];
-
-    struct ARCHIVE *multipkg_archive_pool[PYI_MULTIPKG_ARCHIVE_POOL_SIZE];
-    char multipkg_ref[PYI_PATH_MAX];
-    char multipkg_name[PYI_PATH_MAX];
-
     const char *entry_filename;
-
-    /* Clear the archive pool array. */
-    memset(multipkg_archive_pool, 0, sizeof(multipkg_archive_pool));
 
     for (toc_entry = archive->toc; toc_entry < archive->toc_end; toc_entry = pyi_archive_next_toc_entry(archive, toc_entry)) {
         /* Check if entry is extractable */
         switch (toc_entry->typecode) {
-            /* Onefile mode */
             case ARCHIVE_ITEM_BINARY:
             case ARCHIVE_ITEM_DATA:
             case ARCHIVE_ITEM_ZIPFILE:
             case ARCHIVE_ITEM_SYMLINK: {
-                /* toc_entry->name is the output filename */
                 entry_filename = toc_entry->name;
                 break;
             }
-            /* MERGE multi-package */
-            case ARCHIVE_ITEM_DEPENDENCY: {
-                /* toc_entry->name is multi-package reference; split it */
-                if (pyi_multipkg_split_dependency_string(multipkg_ref, multipkg_name, toc_entry->name) == -1) {
-                    retcode = -1;
-                }
-                entry_filename = multipkg_name;
-                break;
-            }
-            /* Not extractable; skip */
             default: {
                 continue;
             }
-        }
-
-        /* Break on errors in the above switch */
-        if (retcode != 0) {
-            break;
-        }
-
-        /* Update splash screen (display name of the currently-processed entry) */
-        if (pyi_ctx->splash != NULL) {
-            pyi_splash_update_text(pyi_ctx->splash, entry_filename);
         }
 
         /* Construct output filename */
@@ -112,13 +79,7 @@ pyi_launch_extract_files_from_archive(struct PYI_CONTEXT *pyi_ctx)
 
         /* Check if file already exists (it should not) */
         if (pyi_path_exists(output_filename) == 1) {
-            /* Check if file was a splash screen requirement */
-            if (pyi_ctx->splash && pyi_splash_is_splash_requirement(pyi_ctx->splash, entry_filename) == 1) {
-                /* This is splash requirement, so it is expected to exist.
-                 * Also, the file should be in use right now, so avoid
-                 * overwriting it. */
-                continue;
-            } else if (pyi_ctx->strict_unpack_mode) {
+            if (pyi_ctx->strict_unpack_mode) {
                 PYI_ERROR("File already exists but should not: %s\n", output_filename);
                 retcode = -1;
                 break;
@@ -135,28 +96,13 @@ pyi_launch_extract_files_from_archive(struct PYI_CONTEXT *pyi_ctx)
         }
 
         /* Extract */
-        // if (toc_entry->typecode == ARCHIVE_ITEM_DEPENDENCY) {
-        //     retcode = pyi_multipkg_extract_dependency(
-        //         pyi_ctx,
-        //         multipkg_archive_pool,
-        //         multipkg_ref,
-        //         multipkg_name,
-        //         output_filename
-        //     );
-        // } else {
-            retcode = pyi_archive_extract2fs(archive, toc_entry, output_filename);
-        //}
+        retcode = pyi_archive_extract2fs(archive, toc_entry, output_filename);
 
         /* If extraction failed, there is no need to continue. */
         if (retcode != 0) {
             PYI_ERROR("Failed to extract entry: %s.\n", toc_entry->name);
             break;
         }
-    }
-
-    /* Free memory allocated for archive pool. */
-    for (index = 0; multipkg_archive_pool[index] != NULL; index++) {
-        pyi_archive_free(&multipkg_archive_pool[index]);
     }
 
     return retcode;

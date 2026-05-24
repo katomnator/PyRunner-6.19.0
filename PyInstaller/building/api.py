@@ -275,6 +275,12 @@ class PKG(Target):
         archive_toc = []  # TOC containing all other elements. Sorted to enable reproducible builds.
 
         for dest_name, src_name, typecode in self.toc:
+            # PyRunner: the disk archive is only consulted for bootstrap modules ('m'/'M' typecodes).
+            # Python DLL, extension modules (.pyd), stdlib zipfile, PYZ, scripts, and data all come
+            # from the in-memory buffer exe — skip them so they are not embedded in PyRunner's archive.
+            if typecode not in {'PYMODULE', 'PYMODULE-1', 'PYMODULE-2', 'OPTION'}:
+                continue
+
             # Ensure that the source file exists, if necessary. Skip the check for OPTION entries, where 'src_name' is
             # None. Also skip DEPENDENCY entries due to special contents of 'dest_name' and/or 'src_name'. Same for the
             # SYMLINK entries, where 'src_name' is relative target name for symbolic link.

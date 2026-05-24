@@ -25,7 +25,6 @@
 
 /* Types of CArchive items. */
 #define ARCHIVE_ITEM_BINARY           'b'  /* binary */
-#define ARCHIVE_ITEM_DEPENDENCY       'd'  /* runtime option */
 #define ARCHIVE_ITEM_PYZ              'z'  /* zlib (pyz) - frozen Python code */
 #define ARCHIVE_ITEM_ZIPFILE          'Z'  /* zlib (pyz) - frozen Python code */
 #define ARCHIVE_ITEM_PYPACKAGE        'M'  /* Python package (__init__.py) */
@@ -33,7 +32,6 @@
 #define ARCHIVE_ITEM_PYSOURCE         's'  /* Python script (v3) */
 #define ARCHIVE_ITEM_DATA             'x'  /* data */
 #define ARCHIVE_ITEM_RUNTIME_OPTION   'o'  /* runtime option */
-#define ARCHIVE_ITEM_SPLASH           'l'  /* splash resources */
 #define ARCHIVE_ITEM_SYMLINK          'n'  /* symbolic link */
 
 /* Entry in PKG/CArchive TOC */
@@ -75,9 +73,6 @@ struct ARCHIVE
     /* Flag indicating that the archive contains extractable files,
      * and thus has onefile semantics */
     bool contains_extractable_entries;
-
-    /* Pointer to SPLASH TOC entry, if available */
-    const struct TOC_ENTRY *toc_splash;
 
     /* Python version: major * 100 + minor, e.g., 310 for python 3.10 */
     int python_version;

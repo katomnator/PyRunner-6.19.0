@@ -20,7 +20,6 @@
     #include <wchar.h>
 #else
     #include <unistd.h>
-    #include <signal.h>  /* raise */
     #include <errno.h>
 #endif
 
@@ -32,10 +31,6 @@
 #include <stdio.h>  /* FILE */
 #include <stdlib.h> /* calloc */
 #include <string.h> /* memset */
-
-#if defined(__linux__)
-    #include <sys/prctl.h> /* prctl() */
-#endif
 
 #if defined(__APPLE__) && defined(WINDOWED)
     #include <Carbon/Carbon.h>  /* TransformProcessType */
@@ -52,8 +47,6 @@
 #include "pyi_archive.h"
 #include "pyi_utils.h"
 #include "pyi_launch.h"
-#include "pyi_splash.h"
-#include "pyi_apple_events.h"
 
 
 /* Global PYI_CONTEXT structure used for bookkeeping of state variables.
@@ -84,8 +77,6 @@ static void _pyi_main_dump_command_line_arguments(const struct PYI_CONTEXT *pyi_
 #endif
 
 static void _pyi_main_read_runtime_options(struct PYI_CONTEXT *pyi_ctx);
-
-static void _pyi_main_setup_splash_screen(struct PYI_CONTEXT *pyi_ctx);
 
 static int _pyi_main_onedir_or_onefile_child(struct PYI_CONTEXT *pyi_ctx);
 static int _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx);
@@ -144,18 +135,6 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     pyi_ctx->is_onefile = pyi_ctx->archive->contains_extractable_entries;
     PYI_DEBUG("LOADER: application has %s semantics...\n", pyi_ctx->is_onefile ? "onefile" : "onedir");
 
-    /* Check if splash screen is available. */
-    pyi_ctx->has_splash = pyi_ctx->archive->toc_splash != NULL;
-    if (pyi_ctx->has_splash) {
-        /* Check if user requested splash screen to be suppressed by setting
-         * the PYINSTALLER_SUPPRESS_SPLASH_SCREEN environment variable to 1. */
-        env_var_value = pyi_getenv("PYINSTALLER_SUPPRESS_SPLASH_SCREEN");
-        if (env_var_value) {
-            pyi_ctx->suppress_splash = strcmp(env_var_value, "1") == 0;
-        }
-        free(env_var_value);
-    }
-
     /* Check if user explicitly requested environment reset via the
      * PYINSTALLER_RESET_ENVIRONMENT environment variable. In this case,
      * we unconditionally reset the environment and make this process
@@ -213,130 +192,6 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
 
         /* Clear PyInstaller environment variables */
         pyi_unsetenv("_PYI_APPLICATION_HOME_DIR");
-
-        pyi_unsetenv("_PYI_PARENT_PROCESS_LEVEL");
-
-        pyi_unsetenv("_PYI_SPLASH_IPC");
-
-#if defined(__linux__)
-        pyi_unsetenv("_PYI_LINUX_PROCESS_NAME"); /* Linux only */
-#endif
-    }
-
-    /* Use _PYI_PARENT_PROCESS_LEVEL environment variable to infer the
-     * level (type) of this process:
-     *  - parent (launcher) process
-     *  - main (application) process
-     *  - subprocess spawned from main application process. */
-    env_var_value = pyi_getenv("_PYI_PARENT_PROCESS_LEVEL");
-    if (!env_var_value || !env_var_value[0]) {
-        pyi_ctx->parent_process_level = PYI_PROCESS_LEVEL_UNKNOWN;
-    } else {
-        char *endptr;
-         /* Due to limited value range, we use 8-bit signed int (= signed char)
-          * for storage; and we need to explicitly cast the `long` return
-          * value of `strtol()` to avoid warnings on MSVC. */
-        pyi_ctx->parent_process_level = (signed char)strtol(env_var_value, &endptr, 0);
-        if (*endptr != 0) {
-            PYI_ERROR("Invalid value in _PYI_PARENT_PROCESS_LEVEL: %s\n", env_var_value);
-            return -1;
-        }
-    }
-    free(env_var_value);
-
-    PYI_DEBUG("LOADER: parent process level = %d\n", pyi_ctx->parent_process_level);
-    switch (pyi_ctx->parent_process_level) {
-        case PYI_PROCESS_LEVEL_UNKNOWN: {
-            /* The environment variable is not set, which makes us the
-             * original / entry-point process - either the parent/launcher
-             * process of a onefile application, or the main/application
-             * process of a onedir application.
-             *
-             * On POSIX systems where we set library search path via
-             * environment variable (all except macOS and Cygwin), the
-             * entry-point process needs to restart itself for library
-             * search path changes to take effect. This is always needed
-             * for onedir applications, but also for onefile applications
-             * that have splash screen (to ensure proper discovery of
-             * bundled dependencies of Tcl/Tk).
-             *
-             * On Cygwin, the process restart is not necessary because the
-             * library search path is controlled by `SetDllDirectoryW()`,
-             * which can be applied from within the process (same as on
-             * Windows). */
-            if (pyi_ctx->is_onefile) {
-                /* Onefile mode */
-#if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
-                /* Windows, macOs, Cygwin - always mark as the parent process. */
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT;
-#else
-                /* Other POSIX systems; if splash screen is available
-                 * (and not suppressed), mark as the parent process that
-                 * needs to restart itself. Otherwise, mark as the regular
-                 * parent process. */
-                if (pyi_ctx->has_splash && !pyi_ctx->suppress_splash) {
-                    pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
-                } else {
-                    pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT;
-                }
-#endif
-            } else {
-                /* Onedir mode */
-#if defined(_WIN32) || defined(__APPLE__) || defined(__CYGWIN__)
-                /* Windows, macOS, Cygwin - mark as the main process. */
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-#else
-                /* Other POSIX systems - mark as the parent/launcher
-                 * that needs to restart itself. */
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
-#endif
-            }
-            break;
-        }
-#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__CYGWIN__)
-        case PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART: {
-            /* We are either the main application process of a onedir
-             * application after restart, or the parent process of a
-             * splash-screen-enabled onefile application after restart.
-             * Applicable only to POSIX systems other than macOS and Cygwin. */
-            if (pyi_ctx->is_onefile) {
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_PARENT;
-            } else {
-                pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-            }
-            break;
-        }
-#endif
-        // case PYI_PROCESS_LEVEL_PARENT: {
-        //     /* We are the main application process of a onefile application. */
-        //     pyi_ctx->process_level = PYI_PROCESS_LEVEL_MAIN;
-        //     break;
-        // }
-        case PYI_PROCESS_LEVEL_PARENT: {
-            /* We are a sub-process spawned from the main application process,
-            * using the same executable (e.g., via sys.executable). */
-            pyi_ctx->process_level = PYI_PROCESS_LEVEL_SUBPROCESS;
-            break;
-        }
-        default: {
-            PYI_ERROR("Invalid parent process level: %d\n", pyi_ctx->parent_process_level);
-            return -1;
-        }
-    }
-
-    PYI_DEBUG("LOADER: process level = %d\n", pyi_ctx->process_level);
-
-    /* Store our process level in _PYI_PARENT_PROCESS_LEVEL for potential
-     * child processes. If we are already in a spawned child sub-process,
-     * leave the environment variable unchanged, as we do not keep track
-     * of levels beyond that. */
-    if (pyi_ctx->process_level < PYI_PROCESS_LEVEL_SUBPROCESS) {
-        char process_level_str[8];
-        snprintf(process_level_str, sizeof(process_level_str), "%d", pyi_ctx->process_level);
-        if (pyi_setenv("_PYI_PARENT_PROCESS_LEVEL", process_level_str) < 0) {
-            PYI_ERROR("Failed to set _PYI_PARENT_PROCESS_LEVEL environment variable!\n");
-            return -1;
-        }
     }
 
     /* Read all applicable run-time options from the PKG archive */
@@ -359,111 +214,29 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     }
     free(env_var_value);
 
-    /* On Linux, pass the process name from the (original) parent process
-     * to child process(es) via environment variable. In onefile mode,
-     * we want child processes to have the same name as the parent process
-     * (in case executable is a symbolic link). In onedir mode, the process
-     * needs to restart itself, and we need to preserve its name between
-     * the restarts. */
-#if defined(__linux__)
-    if (pyi_ctx->parent_process_level == PYI_PROCESS_LEVEL_UNKNOWN) {
-        /* We are the very top-level process (before restart, if applicable);
-         * pass the process name to child processes (or even itself during
-         * restart) via environment variable. */
-        char processname[16]; /* 16 bytes as per prctl() man page */
-        if (!prctl(PR_GET_NAME, processname, 0, 0)) {
-            PYI_DEBUG("LOADER: storing process name: %s\n", processname);
-            pyi_setenv("_PYI_LINUX_PROCESS_NAME", processname);
-        }
-    } else {
-        /* Restore the name from environment variable. */
-        env_var_value = pyi_getenv("_PYI_LINUX_PROCESS_NAME");
-        if (env_var_value) {
-            PYI_DEBUG("LOADER: restoring process name: %s\n", env_var_value);
-            prctl(PR_SET_NAME, env_var_value, 0, 0); /* Ignore failures */
-        }
-        free(env_var_value);
-    }
-#endif  /* defined(__linux__) */
-
-    /* Infer the process type (onefile parent, onefile child, onedir),
-     * and based on that, determine the application's top-level directory. */
+    /* Determine the application's top-level directory. */
     if (pyi_ctx->is_onefile) {
-        bool create_temp_dir;
-
-        if (pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART) {
-            /* POSIX build with splash screen enabled; before restart. */
-            PYI_DEBUG("LOADER: this is parent process of onefile application (before restart).\n");
-            create_temp_dir = true; /* create */
-        } else if (pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT && pyi_ctx->parent_process_level == PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART) {
-            /* POSIX build with splash screen enabled; after restart. */
-            PYI_DEBUG("LOADER: this is parent process of onefile application (after restart).\n");
-            create_temp_dir = false; /* inherit (created before restart) */
-        } else if (pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT) {
-             /* Windows, macOS, Cygwin. Or other POSIX without splash screen. */
-            PYI_DEBUG("LOADER: this is parent process of onefile application.\n");
-            create_temp_dir = true; /* create */
-        } else {
-            PYI_DEBUG(
-                "LOADER: this is child process of onefile application (%s).\n",
-                "spawned subprocess" 
-            );
-            create_temp_dir = false; /* inherit */
-        }
-
-        if (create_temp_dir) {
-            /* We need to determine and create the ephemeral top-level
-             * application directory. */
-
-            /* On Windows, initialize security descriptor for temporary
-             * directory. This is required by `CreateDirectoryW()` calls
-             * made when creating application's temporary directory and
-             * its sub-directories during file extration. */
+        /* Create the ephemeral top-level application directory. */
 #if defined(_WIN32)
-            PYI_DEBUG("LOADER: initializing security descriptor for temporary directory...\n");
-            pyi_ctx->security_attr = pyi_win32_initialize_security_descriptor();
-            if (pyi_ctx->security_attr == NULL) {
-                PYI_ERROR("Failed to initialize security descriptor for temporary directory!\n");
-                return -1;
-            }
+        PYI_DEBUG("LOADER: initializing security descriptor for temporary directory...\n");
+        pyi_ctx->security_attr = pyi_win32_initialize_security_descriptor();
+        if (pyi_ctx->security_attr == NULL) {
+            PYI_ERROR("Failed to initialize security descriptor for temporary directory!\n");
+            return -1;
+        }
 #endif
 
-            /* Create temporary directory; the path is stored to
-             * `pyi_ctx->application_home_dir`. */
-            PYI_DEBUG("LOADER: creating temporary directory (runtime_tmpdir=%s)...\n", pyi_ctx->runtime_tmpdir);
+        PYI_DEBUG("LOADER: creating temporary directory (runtime_tmpdir=%s)...\n", pyi_ctx->runtime_tmpdir);
+        if (pyi_create_temporary_application_directory(pyi_ctx) < 0) {
+            PYI_ERROR("Could not create temporary directory!\n");
+            return -1;
+        }
+        PYI_DEBUG("LOADER: created temporary directory: %s\n", pyi_ctx->application_home_dir);
 
-            if (pyi_create_temporary_application_directory(pyi_ctx) < 0) {
-                PYI_ERROR("Could not create temporary directory!\n");
-                return -1;
-            }
-
-            PYI_DEBUG("LOADER: created temporary directory: %s\n", pyi_ctx->application_home_dir);
-
-            /* Pass the path to temporary directory to the child process
-             * via corresponding environment variable. */
-            PYI_DEBUG("LOADER: setting _PYI_APPLICATION_HOME_DIR to %s\n", pyi_ctx->application_home_dir);
-            if (pyi_setenv("_PYI_APPLICATION_HOME_DIR", pyi_ctx->application_home_dir) < 0) {
-                PYI_ERROR("Failed to set application home directory via environment variable!\n");
-                return -1;
-            }
-        } else {
-            /* The ephemeral application top-level directory should already
-             * exist, and the path to it should be available in the
-             * _PYI_APPLICATION_HOME_DIR environment variable. */
-            env_var_value = pyi_getenv("_PYI_APPLICATION_HOME_DIR");
-            if (!env_var_value || !env_var_value[0]) {
-                PYI_ERROR("_PYI_APPLICATION_HOME_DIR environment variable is not defined!\n");
-                return -1;
-            }
-
-            /* Copy the application's top-level directory from environment */
-            if (snprintf(pyi_ctx->application_home_dir, PYI_PATH_MAX, "%s", env_var_value) >= PYI_PATH_MAX) {
-                PYI_ERROR("Path exceeds PYI_PATH_MAX limit.\n");
-                free(env_var_value);
-                return -1;
-            }
-
-            free(env_var_value);
+        PYI_DEBUG("LOADER: setting _PYI_APPLICATION_HOME_DIR to %s\n", pyi_ctx->application_home_dir);
+        if (pyi_setenv("_PYI_APPLICATION_HOME_DIR", pyi_ctx->application_home_dir) < 0) {
+            PYI_ERROR("Failed to set application home directory via environment variable!\n");
+            return -1;
         }
     } else {
         char executable_dir[PYI_PATH_MAX];
@@ -529,7 +302,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
      * #9075 has shown that injection of 3rd party DLLs and subsequent
      * locking of VC runtime DLLs can also happen without splash screen,
      * so we now perform this pre-load in all onefile parent processes. */
-    if (pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT) {
+    if (pyi_ctx->is_onefile) {
         const wchar_t *dll_names[] = {
             L"VCRUNTIME140.dll",
             L"VCRUNTIME140_1.dll"
@@ -607,10 +380,7 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
          * Their child processes will inherit the environment variable,
          * and the attempt to modify it again would result in duplicated
          * entries (and clobbered `LD_LIBRARY_PATH_ORIG`). */
-        modify_ld_library_path = (
-            (pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT) ||
-            (!pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_MAIN)
-        );
+        modify_ld_library_path = pyi_ctx->is_onefile;
         if (modify_ld_library_path) {
             if (pyi_utils_set_library_search_path(pyi_ctx->application_home_dir) < 0) {
                 PYI_ERROR("Failed to set library search path via environment variable!\n");
@@ -622,90 +392,16 @@ pyi_main(struct PYI_CONTEXT *pyi_ctx)
     /* No changes to library search path are required on macOS, because
      * we rewrite the library paths on collected binaries. */
 #else
-    /* Other POSIX OSes; we need to modify `LD_LIBRARY_PATH` or its
-     * equivalent. The modification does *not* affect this process!
-     * So in onefile mode, we are setting the environment variable in
-     * the parent / launcher process for the child process(es). In onedir
-     * mode, we need to restart this process for the change to take effect.
-     * Similarly, in parent process of onefile application with splash
-     * screen enabled, we need to restart the process in order for library
-     * search path modification to take effect and ensure that bundled
-     * dependencies of Tcl and Tk shared libraries are discovered. */
-    if (1) {
-        bool modify_ld_library_path;
-        bool needs_restart;
-
-        /* We need to modify `LD_LIBRARY_PATH` or equivalent in the
-         * following cases:
-         *  - main process of onedir application before restart
-         *  - parent process of onefile application with splash screen
-         *    before restart
-         *  - parent process of onefile application without splash screen
-         * These cases can all be inferred from current process level and
-         * the parent process level. */
-        modify_ld_library_path = (
-            /* Main process of onedir application before restart, or
-             * parent process of onefile application with splash screen
-             * before restart. */
-            pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART ||
-            /* Parent process of onefile application without splash screen. */
-            (pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT && pyi_ctx->parent_process_level != PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART)
-        );
-
-        /* Whether we need to restart the process can be directly inferred
-         * from the special process level. */
-        needs_restart = pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT_NEEDS_RESTART;
-
-        if (modify_ld_library_path) {
-            if (pyi_utils_set_library_search_path(pyi_ctx->application_home_dir) == -1) {
-                PYI_ERROR("Failed to set library search path via environment variable!\n");
-                return -1;
-            }
-        }
-
-        if (needs_restart) {
-            PYI_DEBUG("LOADER: process needs to restart itself to apply modifications to library search path.\n");
-
-            /* Restart the process, by calling execvp() without fork(). */
-            /* NOTE: the codepath that ended up here does not perform any
-             * argument modification, so we always use pyi_ctx->argv (as
-             * pyi_ctx->pyi_argv is unavailable). */
-            if (pyi_ctx->dynamic_loader_filename[0] != 0) {
-                char *const *exec_argv;
-
-                PYI_DEBUG("LOADER: restarting process via execvp and dynamic linker/loader: %s\n", pyi_ctx->dynamic_loader_filename);
-                exec_argv = pyi_prepend_dynamic_loader_to_argv(pyi_ctx->argc, pyi_ctx->argv, pyi_ctx->dynamic_loader_filename);
-                if (exec_argv == NULL) {
-                    PYI_ERROR("LOADER: failed to allocate argv array for execvp!\n");
-                    return -1;
-                }
-                if (execvp(pyi_ctx->dynamic_loader_filename, exec_argv) < 0) {
-                    PYI_ERROR("LOADER: failed to restart process: %s\n", strerror(errno));
-                    return -1;
-                }
-            } else {
-                PYI_DEBUG("LOADER: restarting process via execvp\n");
-                if (execvp(pyi_ctx->executable_filename, pyi_ctx->argv) < 0) {
-                    PYI_ERROR("LOADER: failed to restart process: %s\n", strerror(errno));
-                    return -1;
-                }
-            }
-
-            /* Unreachable */
-        }
+    /* Other POSIX OSes; set LD_LIBRARY_PATH for bundled library discovery. */
+    if (pyi_utils_set_library_search_path(pyi_ctx->application_home_dir) == -1) {
+        PYI_ERROR("Failed to set library search path via environment variable!\n");
+        return -1;
     }
 #endif
 
-    /* Setup splash screen, if applicable */
-    _pyi_main_setup_splash_screen(pyi_ctx);
-
-    /* Split execution between onefile parent process vs. onefile child
-     * process / onedir process. */
-    if (pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT) {
-        /* Onefile parent */
+    if (pyi_ctx->is_onefile) {
         return _pyi_main_onefile_parent(pyi_ctx);
     } else {
-        /* Onedir or onefile child */
         return _pyi_main_onedir_or_onefile_child(pyi_ctx);
     }
 }
@@ -774,16 +470,6 @@ _pyi_main_read_runtime_options(struct PYI_CONTEXT *pyi_ctx)
             pyi_ctx->contents_subdirectory = toc_entry->name + 23;
         }
 
-        /* pyi-macos-argv-emulation
-         *
-         * Argv emulation for macOS .app bundles. */
-#if defined(__APPLE__) && defined(WINDOWED)
-        if (strncmp(toc_entry->name, "pyi-macos-argv-emulation", 24) == 0) {
-            pyi_ctx->macos_argv_emulation = 1;
-            continue;
-        }
-#endif
-
         /* pyi-hide-console <value>
          *
          * Console hiding/minimization option for Windows console-enabled
@@ -819,105 +505,9 @@ _pyi_main_read_runtime_options(struct PYI_CONTEXT *pyi_ctx)
         }
 #endif
 
-        /* pyi-bootloader-ignore-signals
-         *
-         * Ignore signals in onefile parent process (POSIX only) */
-#if !defined(_WIN32)
-        if (strncmp(toc_entry->name, "pyi-bootloader-ignore-signals", 29) == 0) {
-            pyi_ctx->ignore_signals = 1;
-            continue;
-        }
-#endif
     }
 }
 
-
-/**********************************************************************\
- *                        Splash screen setup                         *
-\**********************************************************************/
-static void
-_pyi_main_setup_splash_screen(struct PYI_CONTEXT *pyi_ctx)
-{
-    bool is_eligible = false;
-
-    /* Check if splash screen is available at all. */
-    if (!pyi_ctx->has_splash) {
-        PYI_DEBUG("LOADER: splash screen is unavailable.\n");
-        return;
-    }
-
-    /* Check if user requested splash screen to be suppressed. */
-    if (pyi_ctx->suppress_splash) {
-        PYI_DEBUG("LOADER: splash screen is explicitly suppressed via environment variable!\n");
-        /* Let `pyi_splash` module know that splash screen is intentionally
-         * suppressed, by setting _PYI_SPLASH_IPC to 0. */
-        pyi_setenv("_PYI_SPLASH_IPC", "0");
-        return;
-    }
-
-    /* Splash screen should also be gracefully suppressed in sub-processes
-     * spawned by the main application process. */
-    if (pyi_ctx->process_level >= PYI_PROCESS_LEVEL_SUBPROCESS) {
-        PYI_DEBUG("LOADER: spawned subprocess -  suppressing splash screen...\n");
-        pyi_setenv("_PYI_SPLASH_IPC", "0");
-        return;
-    }
-
-    /* Splash screen should be set up by the parent process of a onefile
-     * application, and in the main process of a onedir application. */
-    is_eligible = (
-        (pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_PARENT) ||
-        (!pyi_ctx->is_onefile && pyi_ctx->process_level == PYI_PROCESS_LEVEL_MAIN)
-    );
-    if (!is_eligible) {
-        PYI_DEBUG("LOADER: process is not eligible for splash screen\n");
-        return;
-    }
-
-    /* Load splash screen resources. */
-    PYI_DEBUG("LOADER: loading splash screen resources...\n");
-    pyi_ctx->splash = pyi_splash_context_new();
-    if (pyi_splash_setup(pyi_ctx->splash, pyi_ctx) != 0) {
-        PYI_WARNING("Failed to load splash screen resources!\n");
-        goto cleanup;
-    }
-
-    /* Splash screen resources loaded; setup up splash screen */
-    PYI_DEBUG("LOADER: setting up splash screen...\n");
-
-    /* In onefile mode, we need to extract dependencies (shared
-     * libraries, .tcl files, etc.) from PKG archive. */
-    if (pyi_ctx->is_onefile) {
-        PYI_DEBUG("LOADER: extracting splash screen dependencies...\n");
-        if (pyi_splash_extract(pyi_ctx->splash, pyi_ctx) != 0) {
-            PYI_WARNING("Failed to unpack splash screen dependencies from PKG archive!\n");
-            goto cleanup;
-        }
-    }
-
-    /* Load Tcl/Tk shared libraries */
-    if (pyi_splash_load_shared_libraries(pyi_ctx->splash) != 0) {
-        PYI_WARNING("Failed to load Tcl/Tk shared libraries for splash screen!\n");
-        goto cleanup;
-    }
-
-    /* Finally, start the splash screen */
-    if (pyi_splash_start(pyi_ctx->splash, pyi_ctx->executable_filename) != 0) {
-        PYI_WARNING("Failed to start splash screen!\n");
-        goto cleanup;
-    }
-
-    /* Done! */
-    return;
-
-cleanup:
-    /* A part of setup failed; clean up the state by finalizing it, and
-     * free the allocated structure. */
-    pyi_splash_finalize(pyi_ctx->splash);
-    pyi_splash_context_free(&pyi_ctx->splash);
-
-    return;
-}
 
 /**********************************************************************\
  *                  Onedir or onefile child codepath                  *
@@ -926,43 +516,6 @@ static int
 _pyi_main_onedir_or_onefile_child(struct PYI_CONTEXT *pyi_ctx)
 {
     int ret;
-
-    /* Argument processing and argv emulation for onedir macOS .app bundles.
-     * In onefile mode, this step was performed by the parent, and extra
-     * arguments were passed to argv/argc when spawning child process. */
-#if defined(__APPLE__) && defined(WINDOWED)
-    if (!pyi_ctx->is_onefile) {
-        /* Initialize pyi_argc and pyi_argv with original argc and argv.
-         * Do this regardless of argv-emulation setting, because
-         * pyi_utils_initialize_args() also filters out -psn_xxx argument. */
-        if (pyi_utils_initialize_args(pyi_ctx, pyi_ctx->argc, pyi_ctx->argv) < 0) {
-            return -1;
-        }
-
-        /* Optional argv emulation for onedir .app bundles */
-        if (pyi_ctx->macos_argv_emulation) {
-            /* Install event handlers */
-            pyi_ctx->ae_ctx = pyi_apple_install_event_handlers(pyi_ctx);
-            if (pyi_ctx->ae_ctx == NULL) {
-                PYI_ERROR("Failed to install AppleEvent handlers!\n");
-                return -1;
-            }
-            /* Process Apple events; this updates argc_pyi/argv_pyi
-             * accordingly */
-            pyi_apple_process_events(pyi_ctx->ae_ctx, 0.25);  /* short_timeout (250 ms) */
-            /* Uninstall event handlers */
-            pyi_apple_uninstall_event_handlers(&pyi_ctx->ae_ctx);
-            /* The processing of Apple events swallows up the initial
-             * activation event, whatever it might have been (typically
-             * oapp, but could also be odoc or GURL if application is
-             * launched in response to request to open file/URL).
-             * This seems to cause issues with some UI frameworks
-             * (Tcl/Tk, in particular); so we submit a new oapp event
-             * to ourselves... */
-            pyi_apple_submit_oapp_event();
-        }
-    }
-#endif
 
     /* Late console hiding/minimization; this should turn out to be a
      * no-op in child processes of onefile programs or in spawned
@@ -976,15 +529,8 @@ _pyi_main_onedir_or_onefile_child(struct PYI_CONTEXT *pyi_ctx)
     }
 #endif
 
-    /* Use message queue to have Windows stop showing spinning-wheel
-     * cursor indicating that the program is starting. For details,
-     * see the corresponding comment in the onefile parent code-path.
-     *
-     * In onedir mode, this aims to make noconsole programs that do
-     * not display any UI appear to start faster.
-     */
 #if defined(_WIN32) && defined(WINDOWED)
-    if (pyi_ctx->splash == NULL) {
+    {
         MSG msg;
         PostMessageW(NULL, 0, 0, 0);
         GetMessageW(&msg, NULL, 0, 0);
@@ -995,16 +541,6 @@ _pyi_main_onedir_or_onefile_child(struct PYI_CONTEXT *pyi_ctx)
     pyi_launch_initialize(pyi_ctx);
     ret = pyi_launch_execute(pyi_ctx);
     pyi_launch_finalize(pyi_ctx);
-
-    /* Clean up splash screen resources; required when in single-process
-     * execution mode, i.e. when using --onedir on Windows or macOS. */
-    pyi_splash_finalize(pyi_ctx->splash);
-    pyi_splash_context_free(&pyi_ctx->splash);
-
-#if defined(__APPLE__) && defined(WINDOWED)
-    /* Clean up arguments that were used with Apple event processing .*/
-    pyi_utils_free_args(pyi_ctx);
-#endif
 
     PYI_DEBUG("LOADER: end of process reached!\n");
     return ret;
@@ -1042,128 +578,20 @@ _pyi_main_onefile_parent(struct PYI_CONTEXT *pyi_ctx)
     }
 #endif
 
-    /* When a windowed/noconsole process is launched on Windows, the
-     * OS displays a spinning-wheel cursor to indicate that the program
-     * is starting. This goes on for a fixed amount of time or until
-     * the process uses some UI functionality (creates a window, uses
-     * message queue). In a PyInstaller onefile application, the parent
-     * process displays a window only if splash screen is used; the UI
-     * is created and shown by the child process. To prevent the
-     * "program is starting" cursor being shown for the full duration
-     * (i.e., after the child process shows its UI), make use of
-     * message queue to signal the OS that the process is alive.
-     *
-     * For onefile, we do this just before we spawn the child process,
-     * so that the "program is starting" cursor is shown while the
-     * parent process unpacks the application.
-     *
-     * See: https://github.com/python/cpython/blob/v3.12.2/PC/launcher.c#L765-L779
-     *
-     * NOTE: this step is now somewhat redundant in onefile builds,
-     * because we use hidden window to capture and process events
-     * related to session shutdown while we wait for child process to
-     * exit. Creation of that hidden window and/or its message processing
-     * would also hide the spinning wheel cursor. */
 #if defined(_WIN32) && defined(WINDOWED)
-    if (pyi_ctx->splash == NULL) {
+    {
         MSG msg;
         PostMessageW(NULL, 0, 0, 0);
         GetMessageW(&msg, NULL, 0, 0);
     }
 #endif
 
-    /* On macOS, transform this (parent) process into background
-     * process. */
-#if defined(__APPLE__) && defined(WINDOWED)
-    if (1) {
-        ProcessSerialNumber psn = { 0, kCurrentProcess };
-        TransformProcessType(&psn, kProcessTransformToBackgroundApplication);
-    }
-#endif
-
-    /* Start the child process that will execute user's program. */
-    PYI_DEBUG("LOADER: starting the child process...\n");
-    //ret = pyi_utils_create_child(pyi_ctx);
+    /* Run the application. */
     ret = _pyi_main_onedir_or_onefile_child(pyi_ctx);
-
-    PYI_DEBUG("LOADER: child process exited (return code: %d)\n", ret);
-
-    PYI_DEBUG("LOADER: performing cleanup...\n");
-
-    /* The cleanup code for onefile parent process is organized in a
-     * helper function, so that on Windows, we can also call it from
-     * session shutdown callback.
-     *
-     * If cleanup failed (and this is considered error; see the
-     * implementation), modify the exit code. */
-    // if (pyi_main_onefile_parent_cleanup(pyi_ctx) < 0) {
-    //     ret = -1;
-    // }
-
-    /* Re-raise child's signal, if necessary (POSIX only) */
-#ifndef _WIN32
-    if (pyi_ctx->child_signalled) {
-        PYI_DEBUG("LOADER: re-raising child signal %d\n", pyi_ctx->child_signal);
-        raise(pyi_ctx->child_signal);
-    }
-#endif
 
     PYI_DEBUG("LOADER: end of process reached!\n");
     return ret;
 }
-
-/* This function must be visible to other compilation units, so that
- * on Windows, we can also call it from session shutdown callback. */
-int pyi_main_onefile_parent_cleanup(struct PYI_CONTEXT *pyi_ctx)
-{
-    int cleanup_status;
-    int ret = 0;
-
-    /* Finalize splash screen before temp directory gets wiped, since the splash
-     * screen might hold handles to shared libraries inside the temp dir. Those
-     * wouldn't be removed, leaving the temp folder behind. */
-    pyi_splash_finalize(pyi_ctx->splash);
-    pyi_splash_context_free(&pyi_ctx->splash);
-
-    /* Remove the application's temporary directory */
-    PYI_DEBUG("LOADER: removing temporary directory: %s\n", pyi_ctx->application_home_dir);
-    cleanup_status = pyi_recursive_rmdir(pyi_ctx->application_home_dir);
-
-#ifdef _WIN32
-    /* On Windows, we might fail to remove temporary directory due to
-     * locked file(s), which might happen due to various reasons. Try
-     * to mitigate (some of) them and attempt to remove the temporary
-     * directory again. */
-    if (cleanup_status < 0) {
-        PYI_DEBUG_W(L"LOADER: failed to remove temporary directory - attempting to mitigate the situation...\n");
-        cleanup_status = pyi_win32_mitigate_locked_temporary_directory(pyi_ctx);
-        if (cleanup_status == 0) {
-            PYI_DEBUG_W(L"LOADER: mitigation succeeded.\n");
-        } else {
-            PYI_DEBUG_W(L"LOADER: mitigation failed!\n");
-        }
-    }
-#endif
-
-    if (cleanup_status < 0) {
-        /* Return error if we failed to remove temporary directory while
-         * strict unpack mode is enabled. */
-        if (pyi_ctx->strict_unpack_mode) {
-            PYI_ERROR("Failed to remove temporary directory: %s\n", pyi_ctx->application_home_dir);
-            ret = -1;
-        } else {
-            PYI_WARNING("Failed to remove temporary directory: %s\n", pyi_ctx->application_home_dir);
-        }
-    } else {
-        PYI_DEBUG("LOADER: temporary directory %s was successfully removed.\n", pyi_ctx->application_home_dir);
-    }
-
-    /* Clean up the archive structure */
-    pyi_archive_free(&pyi_ctx->archive);
-
-    return ret;
-}
-
 
 /**********************************************************************\
  *                     Executable file resolution                     *
@@ -1397,36 +825,6 @@ _pyi_main_resolve_executable(struct PYI_CONTEXT *pyi_ctx)
 /**********************************************************************\
  *                      Archive file resolution                       *
 \**********************************************************************/
-// static int
-// _pyi_allow_pkg_sideload(const char *executable)
-// {
-//     FILE *file = NULL;
-//     uint64_t magic_offset;
-//     unsigned char magic[8];
-
-//     /* First, find the PKG sideload signature in the executable */
-//     file = pyi_path_fopen(executable, "rb");
-//     if (!file) {
-//         return -1;
-//     }
-
-//     /* Prepare magic pattern */
-//     memcpy(magic, MAGIC_BASE, sizeof(magic));
-//     magic[3] += 0x0D;  /* 0x00 -> 0x0D */
-
-//     /* Find magic pattern in the executable */
-//     magic_offset = pyi_utils_find_magic_pattern(file, magic, sizeof(magic));
-//     if (magic_offset == 0) {
-//         fclose(file);
-//         return 1; /* Error code 1: no embedded PKG sideload signature */
-//     }
-
-//     /* TODO: expand the verification by embedding hash of the PKG file */
-
-//     /* Allow PKG to be sideloaded */
-//     return 0;
-// }
-
 static int
 _pyi_main_resolve_pkg_archive(struct PYI_CONTEXT *pyi_ctx)
 {
@@ -1454,40 +852,3 @@ _pyi_main_resolve_pkg_archive_modified(struct PYI_CONTEXT *pyi_ctx)
         return -1;}
 }
 
-    //PYI_DEBUG("LOADER: failed to open executable-embedded archive!\n");
-
-    /* Check if side-load is allowed */
-    // status = _pyi_allow_pkg_sideload(pyi_ctx->executable_filename);
-    // if (status != 0) {
-    //     PYI_DEBUG("LOADER: side-load is disabled (code %d)!\n", status);
-    //     PYI_ERROR(
-    //         "Could not load PyInstaller's embedded PKG archive from the executable (%s)\n",
-    //         pyi_ctx->executable_filename
-    //     );
-    //     return -1;
-    // }
-
-    /* Infer the archive filename in side-load mode. On Windows, the .exe
-     * suffix is replaced with .pkg, while elsewhere, .pkg suffix is
-     * appended to the executable file name. */
-// #ifdef _WIN32
-//     snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s", pyi_ctx->executable_filename);
-//     strcpy(pyi_ctx->archive_filename + strlen(pyi_ctx->archive_filename) - 3, "pkg");
-// #else
-//     if (snprintf(pyi_ctx->archive_filename, PYI_PATH_MAX, "%s.pkg", pyi_ctx->executable_filename) >= PYI_PATH_MAX) {
-//         return -1;
-//     }
-// #endif
-
-    //PYI_DEBUG("LOADER: trying to load external PKG archive (%s)...\n", pyi_ctx->archive_filename);
-
-    // pyi_ctx->archive = pyi_archive_open(pyi_ctx->archive_filename);
-    // if (pyi_ctx->archive == NULL) {
-    //     PYI_ERROR(
-    //         "Could not side-load PyInstaller's PKG archive from external file (%s)\n",
-    //         pyi_ctx->archive_filename
-    //     );
-    //     return -1;
-    // }
-
-    // return 0;
